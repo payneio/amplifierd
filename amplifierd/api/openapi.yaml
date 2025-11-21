@@ -1,0 +1,819 @@
+openapi: 3.1.0
+info:
+  title: Amplifier Daemon API
+  version: 1.0.0
+  description: |
+    REST API for the Amplifier daemon - exposes amplifier CLI functionality as HTTP endpoints.
+    
+    ## Architecture
+    - File-based persistence (JSON)
+    - SSE for streaming responses
+    - Multi-session concurrency support
+    - Stateless session resumption
+    
+    ## Key Concepts
+    - **Session**: A persistent conversation context with Claude
+    - **Profile**: Agent configuration with system prompt and tools
+    - **Execution**: Single-shot or streaming LLM interaction
+    
+  contact:
+    name: Amplifier Project
+    url: https://github.com/microsoft/amplifier
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+paths:
+  # Health & Status
+  /health:
+    get:
+      summary: Health check
+      description: Simple health check endpoint
+      operationId: getHealth
+      tags: [Status]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                version: 1.0.0
+                uptime_seconds: 3600
+
+  /status:
+    get:
+      summary: Get daemon status
+      description: Detailed daemon status including active sessions and resource usage
+      operationId: getStatus
+      tags: [Status]
+      responses:
+        '200':
+          description: Daemon status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+              example:
+                status: running
+                active_sessions: 2
+                total_sessions: 15
+                version: 1.0.0
+                uptime_seconds: 3600
+                memory_mb: 256
+
+  # Session Operations
+  /sessions:
+    get:
+      summary: List sessions
+      description: List all sessions with optional filtering
+      operationId: listSessions
+      tags: [Sessions]
+      parameters:
+        - name: days_back
+          in: query
+          description: Number of days to look back
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+        - name: tags
+          in: query
+          description: Filter by tags (comma-separated)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SessionSummary'
+              example:
+                sessions:
+                  - session_id: 123e4567-e89b-12d3-a456-426614174000
+                    name: code-review-session
+                    created_at: '2025-01-20T10:00:00Z'
+                    updated_at: '2025-01-20T10:30:00Z'
+                    turns: 5
+                    tags: [review, python]
+
+    post:
+      summary: Create new session
+      description: Create a new conversation session
+      operationId: createSession
+      tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+            example:
+              name: my-session
+              profile: code-reviewer
+              tags: [review, python]
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /sessions/{session_id}:
+    get:
+      summary: Get session details
+      description: Retrieve complete session state including conversation history
+      operationId: getSession
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete session
+      description: Permanently delete a session
+      operationId: deleteSession
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '204':
+          description: Session deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sessions/{session_id}/execute:
+    post:
+      summary: Execute prompt in session
+      description: Send a prompt to an existing session and get response
+      operationId: executeInSession
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+            example:
+              prompt: Review this function for potential bugs
+              stream: false
+      responses:
+        '200':
+          description: Execution completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{session_id}/stream:
+    get:
+      summary: Stream session events
+      description: |
+        Server-Sent Events (SSE) endpoint for streaming real-time session updates.
+        
+        Event types:
+        - `message`: Content chunk from LLM
+        - `metadata`: Session metadata update
+        - `error`: Error occurred
+        - `done`: Execution completed
+      operationId: streamSession
+      tags: [Sessions]
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                message:
+                  value: |
+                    event: message
+                    data: {"content": "Here is my analysis..."}
+                    
+                    event: metadata
+                    data: {"tokens": 150, "duration_ms": 1200}
+                    
+                    event: done
+                    data: {"status": "completed"}
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Profile Operations
+  /profiles:
+    get:
+      summary: List profiles
+      description: List all available agent profiles
+      operationId: listProfiles
+      tags: [Profiles]
+      responses:
+        '200':
+          description: List of profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profiles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProfileSummary'
+              example:
+                profiles:
+                  - name: code-reviewer
+                    description: Reviews code for bugs and improvements
+                  - name: test-writer
+                    description: Generates unit tests
+
+  /profiles/{profile_name}:
+    get:
+      summary: Get profile details
+      description: Retrieve complete profile configuration
+      operationId: getProfile
+      tags: [Profiles]
+      parameters:
+        - name: profile_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Profile details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /profiles/current:
+    get:
+      summary: Get current profile
+      description: Get the currently active profile
+      operationId: getCurrentProfile
+      tags: [Profiles]
+      responses:
+        '200':
+          description: Current profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileDetail'
+        '404':
+          description: No profile set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      summary: Set current profile
+      description: Change the active profile
+      operationId: setCurrentProfile
+      tags: [Profiles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_name]
+              properties:
+                profile_name:
+                  type: string
+            example:
+              profile_name: code-reviewer
+      responses:
+        '200':
+          description: Profile activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # Execution Operations
+  /execute:
+    post:
+      summary: Single-shot execution
+      description: Execute a prompt without session persistence
+      operationId: execute
+      tags: [Execution]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+            example:
+              prompt: Explain this code snippet
+              profile: code-reviewer
+              stream: false
+      responses:
+        '200':
+          description: Execution completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /execute/stream:
+    post:
+      summary: Streaming execution
+      description: |
+        Execute a prompt with SSE streaming response.
+        Returns Server-Sent Events with chunks as they're generated.
+      operationId: executeStream
+      tags: [Execution]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+            example:
+              prompt: Write a detailed analysis
+              profile: analyst
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                stream:
+                  value: |
+                    event: message
+                    data: {"content": "Starting analysis..."}
+                    
+                    event: message
+                    data: {"content": " Based on the data..."}
+                    
+                    event: done
+                    data: {"status": "completed", "tokens": 250}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # Configuration Operations
+  /config:
+    get:
+      summary: Get configuration
+      description: Retrieve current daemon configuration
+      operationId: getConfig
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+
+    put:
+      summary: Update configuration
+      description: Update daemon configuration (partial updates supported)
+      operationId: updateConfig
+      tags: [Configuration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigUpdate'
+            example:
+              retry_attempts: 5
+              debug: true
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /config/modules:
+    get:
+      summary: List available modules
+      description: List all available amplifier modules
+      operationId: listModules
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Available modules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+                        version:
+                          type: string
+
+  /config/providers:
+    get:
+      summary: List available providers
+      description: List all configured LLM providers
+      operationId: listProviders
+      tags: [Configuration]
+      responses:
+        '200':
+          description: Available providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [anthropic, openai, azure]
+                        available:
+                          type: boolean
+
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      description: Unique session identifier (UUID)
+      schema:
+        type: string
+        format: uuid
+      example: 123e4567-e89b-12d3-a456-426614174000
+
+  schemas:
+    # Health & Status
+    HealthResponse:
+      type: object
+      required: [status, version, uptime_seconds]
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime_seconds:
+          type: integer
+
+    StatusResponse:
+      type: object
+      required: [status, active_sessions, total_sessions, version, uptime_seconds]
+      properties:
+        status:
+          type: string
+          enum: [running, starting, stopping]
+        active_sessions:
+          type: integer
+          description: Number of currently active sessions
+        total_sessions:
+          type: integer
+          description: Total sessions created
+        version:
+          type: string
+        uptime_seconds:
+          type: integer
+        memory_mb:
+          type: integer
+          description: Memory usage in MB
+
+    # Session Models
+    CreateSessionRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Human-readable session name
+        profile:
+          type: string
+          description: Profile name to use (optional, uses current if not specified)
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags for categorization
+
+    SessionSummary:
+      type: object
+      required: [session_id, name, created_at, updated_at, turns]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        turns:
+          type: integer
+          description: Number of conversation turns
+        tags:
+          type: array
+          items:
+            type: string
+
+    SessionDetail:
+      type: object
+      required: [metadata, messages]
+      properties:
+        metadata:
+          $ref: '#/components/schemas/SessionMetadata'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        context:
+          type: object
+          additionalProperties: true
+          description: Additional session context
+        config:
+          type: object
+          additionalProperties: true
+          description: Session configuration
+
+    SessionMetadata:
+      type: object
+      required: [session_id, name, created_at, updated_at, turns]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        turns:
+          type: integer
+        total_tokens:
+          type: integer
+        cost_usd:
+          type: number
+          format: float
+        duration_seconds:
+          type: number
+          format: float
+        tags:
+          type: array
+          items:
+            type: string
+
+    Message:
+      type: object
+      required: [role, content, timestamp]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+
+    # Execution Models
+    ExecuteRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          description: The prompt to execute
+        profile:
+          type: string
+          description: Profile to use (optional)
+        stream:
+          type: boolean
+          default: false
+          description: Enable streaming response
+
+    ExecutionResponse:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: The response content
+        metadata:
+          type: object
+          properties:
+            tokens:
+              type: integer
+            duration_ms:
+              type: integer
+            cost_usd:
+              type: number
+              format: float
+            model:
+              type: string
+          additionalProperties: true
+
+    # Profile Models
+    ProfileSummary:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    ProfileDetail:
+      type: object
+      required: [name, system_prompt]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt:
+          type: string
+        allowed_tools:
+          type: array
+          items:
+            type: string
+        disallowed_tools:
+          type: array
+          items:
+            type: string
+        max_turns:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+
+    # Configuration Models
+    ConfigResponse:
+      type: object
+      properties:
+        default_agent:
+          type: string
+        retry_attempts:
+          type: integer
+        environment:
+          type: object
+          properties:
+            working_directory:
+              type: string
+            session_directory:
+              type: string
+            log_directory:
+              type: string
+            cache_directory:
+              type: string
+            debug:
+              type: boolean
+
+    ConfigUpdate:
+      type: object
+      properties:
+        default_agent:
+          type: string
+        retry_attempts:
+          type: integer
+          minimum: 1
+          maximum: 10
+        debug:
+          type: boolean
+
+    # Error Models
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable error message
+            details:
+              type: object
+              additionalProperties: true
+              description: Additional error context
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INVALID_REQUEST
+              message: Missing required field 'prompt'
+              details:
+                field: prompt
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Session not found
+              details:
+                session_id: 123e4567-e89b-12d3-a456-426614174000
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: Failed to execute prompt
+              details:
+                cause: SDK connection timeout
+
+tags:
+  - name: Status
+    description: Health and status endpoints
+  - name: Sessions
+    description: Session management operations
+  - name: Profiles
+    description: Agent profile operations
+  - name: Execution
+    description: Prompt execution operations
+  - name: Configuration
+    description: Configuration management
