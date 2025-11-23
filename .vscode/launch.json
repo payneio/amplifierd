@@ -9,7 +9,8 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "env": {
-        "AMPLIFIERD_LOG_LEVEL": "debug"
+        "AMPLIFIERD_LOG_LEVEL": "debug",
+        "AMPLIFIERD_PORT": "8421"
       },
       "cwd": "${workspaceFolder}"
     },
