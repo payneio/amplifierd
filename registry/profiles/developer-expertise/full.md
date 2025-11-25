@@ -3,6 +3,7 @@ profile:
   name: full
   version: 1.0.0
   description: Full configuration with all available tools, hooks, and agents
+  schema_version: 2
 session:
   orchestrator:
     module: loop-streaming

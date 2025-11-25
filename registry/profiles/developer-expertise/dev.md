@@ -3,6 +3,7 @@ profile:
   name: dev
   version: 1.2.0
   description: Development configuration with full toolset
+  schema_version: 2
 session:
   orchestrator:
     module: loop-streaming
