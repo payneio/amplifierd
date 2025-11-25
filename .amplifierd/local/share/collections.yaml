@@ -1,5 +1,0 @@
-collections:
-  developer-expertise:
-    source: bundled:amplifierd.data.collections.developer-expertise
-  foundation:
-    source: bundled:amplifierd.data.collections.foundation
