@@ -6,28 +6,39 @@ Interactive Jupyter notebooks demonstrating amplifierd HTTP API usage.
 
 These notebooks provide hands-on examples of all amplifierd API endpoints, organized by feature area. They're designed for experienced developers who want to understand and integrate with the amplifierd daemon.
 
-**Architecture**: Amplifierd uses a Unix-style package management system:
-- **Collections**: Distribution packages (like .deb or Python packages) containing resources
-- **Installation**: Extracts resources to type-based directories (follows Linux FHS pattern)
-- **Resources**: Profiles, modules, agents, and context files in flattened directory structure
-- **Discovery**: User-centric ("show me profiles" not "show me collections")
+**Architecture**: Amplifierd uses a collection-based resource management system:
+- **Collections**: Git repositories or local directories containing profiles, agents, context, and tools
+- **Registry**: `collections.yaml` tracks collection metadata, sources, and assets
+- **Compilation**: Profiles are compiled on-demand with full asset resolution
+- **Discovery**: Auto-discovery scans registry and compiles profiles with dependencies
 
 ### Directory Structure
 
 ```
-{AMPLIFIERD_HOME}/local/share/
-├── collections.yaml                    # Package registry
-├── modules/{collection}/{type}/{name}/ # Flattened module structure
-├── profiles/{collection}/              # Profile packages (also supports standalone)
-├── agents/{collection}/                # Agent packages
-└── context/{collection}/               # Context packages
+$AMPLIFIERD_HOME/
+├── cache/
+│   ├── git/{commit-hash}/           # Git repo caches
+│   └── fsspec/http/                 # HTTP URL caches
+├── share/
+│   ├── collections.yaml             # Collection registry
+│   └── profiles/{collection}/{profile}/
+│       ├── {profile}.md             # Manifest (preserves original)
+│       ├── orchestrator/            # Orchestrator module
+│       ├── agents/                  # Agent files
+│       ├── context/                 # Context directory
+│       ├── tools/                   # Tool modules
+│       ├── hooks/                   # Hook modules
+│       └── providers/               # Provider modules
+└── state/
+    └── active_profile.txt           # Active profile name
 ```
 
 **Key Points:**
-- **Flattened layout**: Resources organized by type, not nested in collection directories
-- **Unix precedent**: Like `/etc/profile.d/`, `/usr/share/`, etc.
-- **Standalone support**: Can place resources directly (e.g., `profiles/my-profile.yaml`)
-- **Namespace isolation**: Collection name preserved to prevent conflicts
+- **Git subdirectory support**: Collections can reference subdirectories using `#subdirectory=path`
+- **Schema v2 only**: All profiles use schema_version 2 format
+- **Auto-compilation**: Profiles compiled automatically with full asset resolution
+- **Manifest preservation**: Original `.md` manifests preserved alongside compiled assets
+- **No extends support**: Profiles are self-contained after compilation
 
 ## Prerequisites
 
@@ -83,40 +94,67 @@ Session management for LLM interactions:
 **File**: `03-profile-management.ipynb`
 
 Profile discovery and activation:
-- **Read Operations**: List, get, and explore profiles from flattened directory
+- **Read Operations**: List and get compiled profiles with full asset resolution
 - **Write Operations**: Activate and deactivate profiles
-- **Profile Format**: Simple YAML with one-level inheritance via `extends` field
-- **Discovery**: Scans `{AMPLIFIERD_HOME}/local/share/profiles/**/*.yaml` recursively
-- **Standalone Support**: Create profiles directly in `profiles/` without collections
+- **Profile Format**: Schema v2 only (schema_version: 2)
+- **Discovery**: Auto-discovery compiles profiles from registry on demand
+- **Compilation**: Full asset resolution with module copying
 - **Activation**: Stored in plain text file (`active_profile.txt`)
 
-**Focus**: Configuring LLM providers, tools, and hooks
+**Focus**: Configuring LLM providers, tools, hooks, and compiled profiles
 
 ### 04 - Collection Management
 **File**: `04-collection-management.ipynb`
 
-Package management and installation:
-- **Read Operations**: List installed collections from registry (`collections.yaml`)
-- **Write Operations**: Mount (clone → extract → register) and unmount (cleanup)
-- **Package Structure**: Distribution format with `collection.yaml` metadata
-- **Installation**: Extracts resources to flattened directories (`modules/`, `profiles/`, etc.)
-- **Registry**: `collections.yaml` tracks installed collections and their resources
-- **Unix Model**: Like Linux packages installing to `/etc/`, `/usr/share/`, etc.
+Collection registry and synchronization:
+- **Read Operations**: List collections from registry (`collections.yaml`)
+- **Write Operations**: Sync registry (discover collections and profiles)
+- **Collection Sources**: Git repositories or local directories
+- **Git Subdirectories**: Support for `#subdirectory=path` syntax
+- **Registry Format**: YAML with metadata, sources, and asset tracking
+- **Auto-Discovery**: Automatic profile compilation during sync
 
-**Focus**: Managing reusable configuration packages
+**Focus**: Managing collection registry and profile discovery
 
 ### 05 - Module Management
 **File**: `05-module-management.ipynb`
 
-Module discovery from flattened structure:
-- **Read Operations**: Discover modules from type-based directories
-- **Module IDs**: Format `{collection}/{type}/{name}` (collection preserved for namespace)
-- **Discovery**: Scans `{AMPLIFIERD_HOME}/local/share/modules/{collection}/{type}/{name}/`
-- **Directory Structure**: `modules/{collection}/` not `collections/{collection}/modules/`
-- **Metadata**: Read from `module.yaml` files
-- **Namespace Isolation**: Collection name prevents conflicts between packages
+Module discovery and resolution:
+- **Read Operations**: List modules from compiled profiles
+- **Module Resolution**: Follow refs to source collections
+- **Module Types**: orchestrator, agents, context, tools, hooks, providers
+- **Discovery**: Modules compiled into profile directories during profile compilation
+- **Metadata**: Module information from source collection manifests
+- **Namespace**: Collection-qualified references (e.g., `@foundation/context/shared`)
 
-**Focus**: Understanding module discovery in flattened architecture
+**Focus**: Understanding module resolution and compiled profile structure
+
+### 06 - Mount Plan Generation
+**File**: `06-mount-plan-generation.ipynb`
+
+Mount plan generation from cached profiles:
+- **Generate Plans**: Convert profiles into structured mount plans
+- **Mount Types**: EmbeddedMount (agents/context) vs ReferencedMount (providers/tools/hooks)
+- **Module IDs**: Convention `{profile}.{type}.{name}` for unique identification
+- **Organization**: Automatic grouping by module type
+- **Settings**: Apply settings overrides during generation
+- **Format Versioning**: Plans include formatVersion for compatibility
+
+**Focus**: Understanding mount plan structure and generation
+
+### 07 - Session Lifecycle
+**File**: `07-session-lifecycle.ipynb`
+
+Enhanced session management with mount plan integration:
+- **Session Creation**: Automatic mount plan generation on session creation
+- **Lifecycle States**: CREATED → ACTIVE → COMPLETED/FAILED/TERMINATED
+- **Message Management**: Append messages to transcript, retrieve conversation history
+- **Session Queries**: Filter by status, profile, date range
+- **State Persistence**: Atomic updates with session.json, transcript.jsonl
+- **Error Handling**: Fail sessions with error details, terminate sessions
+- **Cleanup**: Age-based cleanup with status protection
+
+**Focus**: Complete session lifecycle with mount plans and transcripts
 
 ## Learning Path
 
@@ -126,12 +164,14 @@ Module discovery from flattened structure:
 3. Pick relevant notebooks based on your needs
 
 ### For Complete Understanding
-Work through all notebooks in order (01 → 05).
+Work through all notebooks in order (01 → 07).
 
 ### For Specific Tasks
 - **Managing LLM configurations?** → `03-profile-management.ipynb`
 - **Adding shared modules?** → `04-collection-management.ipynb`
 - **Understanding module structure?** → `05-module-management.ipynb`
+- **Generating mount plans?** → `06-mount-plan-generation.ipynb`
+- **Managing session lifecycle?** → `07-session-lifecycle.ipynb`
 
 ## API Coverage
 
@@ -140,13 +180,14 @@ Work through all notebooks in order (01 → 05).
 | Category | Read Endpoints | Write Endpoints |
 |----------|----------------|-----------------|
 | **Status** | 3 endpoints | - |
-| **Sessions** | 2 GET | 2 POST, 1 DELETE |
+| **Sessions** | 4 GET | 6 POST, 1 DELETE |
 | **Messages** | 1 GET | 1 POST |
 | **Profiles** | 3 GET | 1 POST, 1 DELETE |
 | **Collections** | 2 GET | 1 POST, 1 DELETE |
 | **Modules** | 7 GET | - |
+| **Mount Plans** | 1 GET | 1 POST |
 
-**Total**: 18 endpoints across all operations
+**Total**: 30+ endpoints across all operations
 
 ## Features Demonstrated
 
@@ -229,6 +270,27 @@ python -m amplifierd
 - Check resource exists using list endpoints first
 - Verify identifiers match exactly (case-sensitive)
 - Some resources may not exist in fresh installations
+
+### Missing Refs During Compilation
+- Verify collection is registered in `collections.yaml`
+- Check ref syntax matches `@collection/module_type/module_name`
+- Ensure source collection contains referenced module
+- Run collection sync to refresh registry
+
+### Schema v1 Profiles Rejected
+- All profiles must use `schema_version: 2`
+- No support for legacy schema v1 profiles
+- Update profile manifests to schema v2 format
+
+### Subdirectory Not Found
+- Verify Git URL includes `#subdirectory=path` fragment
+- Check subdirectory path exists in repository
+- Ensure path is relative to repository root
+
+### Cache Location Issues
+- Git repos cached in `$AMPLIFIERD_HOME/cache/git/{commit-hash}/`
+- HTTP URLs cached in `$AMPLIFIERD_HOME/cache/fsspec/http/`
+- Clear cache by removing cache directories
 
 ## Additional Resources
 

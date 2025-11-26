@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from amplifierd.main import app
 from amplifierd.routers.modules import get_module_discovery_service
-from amplifierd.services.simple_module_service import ModuleService
+from amplifierd.services.module_service import ModuleService
 
 
 @pytest.fixture

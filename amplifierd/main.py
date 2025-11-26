@@ -15,6 +15,7 @@ from amplifier_library.config.loader import load_config
 from .routers import collections_router
 from .routers import messages_router
 from .routers import modules_router
+from .routers import mount_plans_router
 from .routers import profiles_router
 from .routers import sessions_router
 from .routers import status_router
@@ -108,6 +109,7 @@ app.include_router(status_router)
 app.include_router(profiles_router)
 app.include_router(collections_router)
 app.include_router(modules_router)
+app.include_router(mount_plans_router)
 
 
 @app.get("/")

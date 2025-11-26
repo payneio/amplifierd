@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from amplifierd.services.module_resolver_service import ModuleResolverService
-from amplifierd.services.simple_profile_service import ProfileService
+from amplifierd.services.profile_service import ProfileService
 
 
 @pytest.fixture
