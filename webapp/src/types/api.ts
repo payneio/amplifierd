@@ -11,10 +11,42 @@ export interface Collection {
 export interface Profile {
   name: string;
   description?: string;
-  base_profile?: string;
+  source: string;
+  isActive: boolean;
+  collectionId?: string;
+  schemaVersion?: number;
+  baseProfile?: string;
   settings?: Record<string, unknown>;
-  context_files?: string[];
+  contextFiles?: string[];
   metadata?: Record<string, unknown>;
+}
+
+export interface ModuleConfig {
+  module: string;
+  source?: string;
+  config?: Record<string, unknown>;
+}
+
+export interface SessionConfig {
+  orchestrator: ModuleConfig;
+  contextManager?: ModuleConfig;
+}
+
+export interface ProfileDetails {
+  name: string;
+  schemaVersion: number;
+  version: string;
+  description: string;
+  collectionId?: string;
+  source: string;
+  isActive: boolean;
+  inheritanceChain?: string[];
+  providers: ModuleConfig[];
+  tools: ModuleConfig[];
+  hooks: ModuleConfig[];
+  session?: SessionConfig;
+  agents?: string[];
+  context?: string[];
 }
 
 export interface AmplifiedDirectory {
@@ -33,15 +65,20 @@ export interface AmplifiedDirectoryCreate {
 }
 
 export interface Session {
-  session_id: string;
-  profile_name: string;
-  status: 'CREATED' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'TERMINATED';
-  created_at: string;
-  started_at?: string;
-  completed_at?: string;
-  parent_session_id?: string;
-  settings_overrides?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  sessionId: string;
+  profileName: string;
+  status: 'created' | 'active' | 'completed' | 'failed' | 'terminated';
+  createdAt: string;
+  startedAt?: string;
+  endedAt?: string;
+  parentSessionId?: string;
+  amplifiedDir?: string;
+  mountPlanPath?: string;
+  messageCount?: number;
+  agentInvocations?: number;
+  tokenUsage?: unknown;
+  errorMessage?: string;
+  errorDetails?: unknown;
 }
 
 export interface SessionMessage {
@@ -54,8 +91,8 @@ export interface SessionMessage {
 }
 
 export interface CreateSessionRequest {
-  profile_name: string;
-  parent_session_id?: string;
+  profile_name: string;  // API expects snake_case for POST body
+  parent_session_id?: string;  // API expects snake_case for POST body
   settings_overrides?: Record<string, unknown>;
 }
 
@@ -67,4 +104,25 @@ export interface SyncCollectionsResponse {
 export interface ListDirectoriesResponse {
   directories: AmplifiedDirectory[];
   total: number;
+}
+
+export interface CreateProfileRequest {
+  name: string;
+  version?: string;
+  description?: string;
+  providers?: ModuleConfig[];
+  tools?: ModuleConfig[];
+  hooks?: ModuleConfig[];
+  orchestrator?: ModuleConfig;
+  context?: ModuleConfig;
+}
+
+export interface UpdateProfileRequest {
+  version?: string;
+  description?: string;
+  providers?: ModuleConfig[];
+  tools?: ModuleConfig[];
+  hooks?: ModuleConfig[];
+  orchestrator?: ModuleConfig;
+  context?: ModuleConfig;
 }

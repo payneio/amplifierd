@@ -1,8 +1,19 @@
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink } from 'react-router'
 import { cn } from '@/lib/utils'
 import { Home, FolderOpen, Package } from 'lucide-react'
 
 export function MainLayout() {
+  const [directoriesUrl, setDirectoriesUrl] = useState('/directories');
+
+  // Read last Directories URL from sessionStorage
+  useEffect(() => {
+    const lastUrl = sessionStorage.getItem('lastDirectoriesUrl');
+    if (lastUrl) {
+      setDirectoriesUrl(lastUrl);
+    }
+  }, []);
+
   return (
     <div className="flex h-screen">
       <aside className={cn(
@@ -44,7 +55,7 @@ export function MainLayout() {
             </li>
             <li>
               <NavLink
-                to="/directories"
+                to={directoriesUrl}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",

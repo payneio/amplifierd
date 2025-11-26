@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { Folder, Plus } from 'lucide-react';
 import { useDirectories } from '../hooks/useDirectories';
+import { CreateDirectoryDialog } from './CreateDirectoryDialog';
+import type { AmplifiedDirectoryCreate } from '@/types/api';
 
 interface DirectoriesListProps {
   onSelectDirectory: (path: string) => void;
@@ -7,7 +10,19 @@ interface DirectoriesListProps {
 }
 
 export function DirectoriesList({ onSelectDirectory, selectedPath }: DirectoriesListProps) {
-  const { directories, isLoading } = useDirectories();
+  const { directories, isLoading, createDirectory } = useDirectories();
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const handleCreateDirectory = async (data: AmplifiedDirectoryCreate) => {
+    setCreateError(null);
+    try {
+      await createDirectory.mutateAsync(data);
+      setShowCreateDialog(false);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create directory');
+    }
+  };
 
   if (isLoading) {
     return <div className="text-muted-foreground">Loading directories...</div>;
@@ -17,7 +32,10 @@ export function DirectoriesList({ onSelectDirectory, selectedPath }: Directories
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Amplified Directories</h2>
-        <button className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm">
+        <button
+          onClick={() => setShowCreateDialog(true)}
+          className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
+        >
           <Plus className="h-4 w-4" />
           New
         </button>
@@ -52,6 +70,17 @@ export function DirectoriesList({ onSelectDirectory, selectedPath }: Directories
           ))}
         </div>
       )}
+
+      <CreateDirectoryDialog
+        open={showCreateDialog}
+        onClose={() => {
+          setShowCreateDialog(false);
+          setCreateError(null);
+        }}
+        onSubmit={handleCreateDirectory}
+        isLoading={createDirectory.isPending}
+        error={createError || undefined}
+      />
     </div>
   );
 }

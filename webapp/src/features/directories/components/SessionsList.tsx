@@ -59,30 +59,30 @@ export function SessionsList({ directoryPath }: SessionsListProps) {
         <div className="space-y-2">
           {sessions.map((session) => (
             <div
-              key={session.session_id}
+              key={session.sessionId}
               className="border rounded-lg p-4 hover:bg-accent transition-colors"
             >
               <div className="flex items-start justify-between gap-4">
                 <button
-                  onClick={() => navigate(`/directories/sessions/${session.session_id}`)}
+                  onClick={() => navigate(`/directories/sessions/${session.sessionId}`)}
                   className="flex-1 text-left"
                 >
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4" />
-                    <div className="font-medium">{session.session_id}</div>
+                    <div className="font-medium">{session.sessionId}</div>
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    Profile: {session.profile_name} • Status: {session.status}
+                    Profile: {session.profileName} • Status: {session.status}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    Created: {new Date(session.created_at).toLocaleString()}
+                    Created: {new Date(session.createdAt).toLocaleString()}
                   </div>
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     if (confirm('Delete this session?')) {
-                      deleteSession.mutate(session.session_id);
+                      deleteSession.mutate(session.sessionId);
                     }
                   }}
                   className="text-destructive hover:text-destructive/80 p-2"

@@ -1,9 +1,10 @@
+import React from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, Play } from 'lucide-react';
 import { useSession } from '../hooks/useSession';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import * as api from '@/api';
 
 export function SessionView() {
@@ -16,16 +17,30 @@ export function SessionView() {
   }
 
   const { session, transcript, isLoading, startSession } = useSession(sessionId);
+  const [isSending, setIsSending] = React.useState(false);
 
-  const sendMessage = useMutation({
-    mutationFn: (content: string) => api.sendMessage(sessionId, content),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transcript', sessionId] });
-    },
-  });
-
-  const handleSend = (message: string) => {
-    sendMessage.mutate(message);
+  const handleSend = async (message: string) => {
+    setIsSending(true);
+    try {
+      await api.executeWithSSE(sessionId, message, {
+        onMessage: (msg) => {
+          console.log('SSE message:', msg);
+          // Messages are appended by the backend, just wait for completion
+        },
+        onComplete: () => {
+          // Refresh transcript after execution completes
+          queryClient.invalidateQueries({ queryKey: ['transcript', sessionId] });
+          setIsSending(false);
+        },
+        onError: (error) => {
+          console.error('SSE error:', error);
+          setIsSending(false);
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setIsSending(false);
+    }
   };
 
   if (isLoading) {
@@ -44,7 +59,7 @@ export function SessionView() {
     );
   }
 
-  const needsStart = session.status === 'CREATED';
+  const needsStart = session.status === 'created';
 
   return (
     <div className="flex flex-col h-full">
@@ -60,7 +75,7 @@ export function SessionView() {
           <div className="flex-1">
             <h1 className="text-xl font-bold">Session: {sessionId}</h1>
             <p className="text-sm text-muted-foreground">
-              Profile: {session.profile_name} • Status: {session.status}
+              Profile: {session.profileName} • Status: {session.status}
             </p>
           </div>
           {needsStart && (
@@ -82,7 +97,7 @@ export function SessionView() {
       {/* Input */}
       <MessageInput
         onSend={handleSend}
-        disabled={needsStart || sendMessage.isPending}
+        disabled={needsStart || isSending}
       />
     </div>
   );

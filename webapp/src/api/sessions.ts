@@ -12,14 +12,14 @@ export const listSessions = (params?: {
   if (params?.limit) searchParams.set('limit', String(params.limit));
 
   const query = searchParams.toString();
-  return fetchApi<Session[]>(`/api/v1/sessions${query ? `?${query}` : ''}`);
+  return fetchApi<Session[]>(`/api/v1/sessions/${query ? `?${query}` : ''}`);
 };
 
 export const getSession = (sessionId: string) =>
   fetchApi<Session>(`/api/v1/sessions/${sessionId}`);
 
 export const createSession = (data: CreateSessionRequest) =>
-  fetchApi<Session>('/api/v1/sessions', {
+  fetchApi<Session>('/api/v1/sessions/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -43,10 +43,12 @@ export const getTranscript = (sessionId: string, limit?: number) => {
 
 export const sendMessage = (
   sessionId: string,
-  content: string,
-  role: string = 'user'
+  content: string
 ) =>
-  fetchApi<void>(`/api/v1/sessions/${sessionId}/messages`, {
+  fetchApi<void>(`/api/v1/sessions/${sessionId}/execute`, {
     method: 'POST',
-    body: JSON.stringify({ role, content }),
+    body: JSON.stringify({ content }),
   });
+
+// Export SSE execution function for components that want streaming
+export { executeWithSSE } from './sse';

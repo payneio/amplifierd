@@ -1,5 +1,4 @@
-import { CollectionsList } from './CollectionsList';
-import { ProfilesList } from './ProfilesList';
+import { CollectionsWithProfiles } from './CollectionsWithProfiles';
 
 export function CollectionsPage() {
   return (
@@ -7,14 +6,11 @@ export function CollectionsPage() {
       <div>
         <h1 className="text-3xl font-bold mb-2">Collections & Profiles</h1>
         <p className="text-muted-foreground">
-          Manage your amplifier collections and profiles
+          Manage your amplifier collections and their profiles
         </p>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-8">
-        <CollectionsList />
-        <ProfilesList />
-      </div>
+      <CollectionsWithProfiles />
     </div>
   );
 }

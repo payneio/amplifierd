@@ -2,7 +2,7 @@ import { fetchApi } from './client';
 import type { Collection, SyncCollectionsResponse } from '@/types/api';
 
 export const listCollections = () =>
-  fetchApi<Collection[]>('/api/v1/collections');
+  fetchApi<Collection[]>('/api/v1/collections/');
 
 export const getCollection = (identifier: string) =>
   fetchApi<Collection>(`/api/v1/collections/${identifier}`);
@@ -19,6 +19,7 @@ export const syncCollections = (params?: {
 
   const query = searchParams.toString();
   return fetchApi<SyncCollectionsResponse>(
-    `/api/v1/collections/sync${query ? `?${query}` : ''}`
+    `/api/v1/collections/sync${query ? `?${query}` : ''}`,
+    { method: 'POST' }
   );
 };

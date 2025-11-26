@@ -2,13 +2,13 @@ import { fetchApi } from './client';
 import type { AmplifiedDirectory, AmplifiedDirectoryCreate, ListDirectoriesResponse } from '@/types/api';
 
 export const listDirectories = () =>
-  fetchApi<ListDirectoriesResponse>('/amplified-directories');
+  fetchApi<ListDirectoriesResponse>('/api/v1/amplified-directories/');
 
 export const getDirectory = (relativePath: string) =>
-  fetchApi<AmplifiedDirectory>(`/amplified-directories/${relativePath}`);
+  fetchApi<AmplifiedDirectory>(`/api/v1/amplified-directories/${relativePath}`);
 
 export const createDirectory = (data: AmplifiedDirectoryCreate) =>
-  fetchApi<AmplifiedDirectory>('/amplified-directories', {
+  fetchApi<AmplifiedDirectory>('/api/v1/amplified-directories/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -17,7 +17,7 @@ export const updateDirectory = (
   relativePath: string,
   data: Partial<AmplifiedDirectoryCreate>
 ) =>
-  fetchApi<AmplifiedDirectory>(`/amplified-directories/${relativePath}`, {
+  fetchApi<AmplifiedDirectory>(`/api/v1/amplified-directories/${relativePath}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
@@ -27,6 +27,6 @@ export const deleteDirectory = (
   removeMarker: boolean = false
 ) =>
   fetchApi<void>(
-    `/amplified-directories/${relativePath}?remove_marker=${removeMarker}`,
+    `/api/v1/amplified-directories/${relativePath}?remove_marker=${removeMarker}`,
     { method: 'DELETE' }
   );
