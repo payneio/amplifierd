@@ -4,8 +4,11 @@ Resolves profile refs and caches compiled assets for dynamic import.
 Creates Python module structure from profile manifests with all refs resolved.
 """
 
+import hashlib
+import json
 import logging
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from amplifierd.models.profiles import ProfileDetails
@@ -61,17 +64,61 @@ class ProfileCompilationService:
         self.profiles_dir.mkdir(parents=True, exist_ok=True)
         self.ref_resolution = ref_resolution
 
-    def compile_profile(self, collection_id: str, profile: ProfileDetails) -> Path:
-        """Compile profile by resolving all refs.
+    def _hash_profile_manifest(self, profile: ProfileDetails) -> str:
+        """Hash profile manifest for change detection.
+
+        Creates a stable hash of the profile manifest by serializing key fields
+        that affect compilation output. Changes to profile definition will change
+        the hash, triggering recompilation.
+
+        Args:
+            profile: ProfileDetails to hash
+
+        Returns:
+            SHA256 hex digest of manifest content
+        """
+        manifest_data = {
+            "name": profile.name,
+            "version": profile.version,
+            "agents": sorted(profile.agents or []),
+            "context": sorted(profile.context or []),
+            "tools": [{"module": t.module, "source": t.source} for t in profile.tools],
+            "hooks": [{"module": h.module, "source": h.source} for h in profile.hooks],
+            "providers": [{"module": p.module, "source": p.source} for p in profile.providers],
+        }
+
+        # Add session orchestrator if present
+        if profile.session and profile.session.orchestrator:
+            manifest_data["orchestrator"] = {
+                "module": profile.session.orchestrator.module,
+                "source": profile.session.orchestrator.source,
+            }
+
+        # Add context manager if present
+        if profile.session and profile.session.context_manager:
+            manifest_data["context_manager"] = {
+                "module": profile.session.context_manager.module,
+                "source": profile.session.context_manager.source,
+            }
+
+        content = json.dumps(manifest_data, sort_keys=True)
+        return hashlib.sha256(content.encode()).hexdigest()
+
+    def compile_profile(self, collection_id: str, profile: ProfileDetails, force: bool = False) -> Path:
+        """Compile profile by resolving all refs with change detection.
 
         Creates a staging directory for compilation, resolves all referenced
         assets (agents, context, module sources), and creates a Python module
         structure ready for dynamic import. On success, atomically renames
         staging to final location. On failure, cleans up staging directory.
 
+        Uses hash-based change detection to skip compilation if profile manifest
+        is unchanged and force=False. Saves compilation metadata for future checks.
+
         Args:
             collection_id: Collection identifier
             profile: ProfileDetails with refs to resolve
+            force: If True, recompile even if manifest unchanged
 
         Returns:
             Path to compiled profile directory (share/profiles/{collection}/{profile-name}/)
@@ -81,6 +128,7 @@ class ProfileCompilationService:
             - Creates Python module structure with __init__.py files
             - Copies resolved assets into compilation directory
             - Uses staging directory for atomic compilation
+            - Saves .compilation_meta.json for change detection
 
         Raises:
             RefResolutionError: If any ref cannot be resolved
@@ -98,9 +146,22 @@ class ProfileCompilationService:
         """
         logger.info(f"Compiling profile {collection_id}/{profile.name}")
 
-        # Define final and staging paths (using profile name, not random UID)
+        # Define final and staging paths
         final_dir = self.profiles_dir / collection_id / profile.name
         staging_dir = self.profiles_dir / collection_id / f".staging-{profile.name}"
+        meta_file = final_dir / ".compilation_meta.json"
+
+        # Check if recompilation needed via hash comparison
+        if not force and meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text())
+                current_hash = self._hash_profile_manifest(profile)
+
+                if meta["manifest_hash"] == current_hash:
+                    logger.info(f"Profile {collection_id}/{profile.name} unchanged, skipping compilation")
+                    return final_dir
+            except Exception as e:
+                logger.warning(f"Failed to read compilation metadata: {e}, will recompile")
 
         # Create staging directory
         staging_dir.mkdir(parents=True, exist_ok=True)
@@ -198,6 +259,16 @@ class ProfileCompilationService:
                 shutil.rmtree(final_dir)
             logger.debug(f"Compilation successful, atomically renaming {staging_dir} -> {final_dir}")
             staging_dir.rename(final_dir)
+
+            # Save compilation metadata for change detection
+            metadata = {
+                "manifest_hash": self._hash_profile_manifest(profile),
+                "compiled_at": datetime.now().isoformat(),
+                "source_commit": "main",
+            }
+            meta_file_final = final_dir / ".compilation_meta.json"
+            meta_file_final.write_text(json.dumps(metadata, indent=2))
+            logger.debug(f"Saved compilation metadata: {meta_file_final}")
 
             logger.info(f"Successfully compiled profile: {collection_id}/{profile.name} → {final_dir}")
             return final_dir

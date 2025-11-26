@@ -507,11 +507,18 @@ class CollectionService:
         """
         self._load_registry()
 
-    def sync_collections(self, update: bool = False) -> dict[str, str]:
+    def sync_collections(
+        self,
+        force_refresh: bool = False,
+        auto_compile: bool = True,
+        force_compile: bool = False,
+    ) -> dict[str, str]:
         """Sync all collections from registry.
 
         Args:
-            update: If True, run git pull for cached git repos
+            force_refresh: If True, delete cached git repos and re-clone (formerly 'update')
+            auto_compile: If True, automatically compile profiles after sync
+            force_compile: If True, force profile recompilation even if up-to-date
 
         Returns:
             Dictionary mapping collection name to status ("synced", "updated", "skipped", "error")
@@ -537,7 +544,7 @@ class CollectionService:
                         logger.info(f"Cloning {name} to cache")
                         git_cache_dir = self._clone_to_cache(name, source)
                         results[name] = "synced"
-                    elif update:
+                    elif force_refresh:
                         shutil.rmtree(git_cache_dir)
                         logger.info(f"Re-cloning {name} to cache")
                         git_cache_dir = self._clone_to_cache(name, source)
@@ -564,12 +571,15 @@ class CollectionService:
                         discovered_profiles = self.discovery_service.discover_profiles(name, source_dir)
                         logger.info(f"Discovered {len(discovered_profiles)} profiles from {name}")
 
-                        # Auto-compile profiles if compilation service available
-                        if self.compilation_service and discovered_profiles:
+                        # Auto-compile profiles if enabled and compilation service available
+                        if auto_compile and self.compilation_service and discovered_profiles:
                             compiled_count = 0
                             for profile in discovered_profiles:
                                 try:
-                                    compiled_path = self.compilation_service.compile_profile(name, profile)
+                                    # Pass force_compile to enable change detection
+                                    compiled_path = self.compilation_service.compile_profile(
+                                        name, profile, force=force_compile
+                                    )
                                     logger.info(f"Auto-compiled profile: {name}/{profile.name} → {compiled_path}")
                                     compiled_count += 1
                                 except Exception as e:

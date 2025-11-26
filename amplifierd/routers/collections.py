@@ -97,18 +97,22 @@ async def get_collection(
 @router.post("/sync")
 async def sync_collections(
     service: Annotated[CollectionService, Depends(get_collection_service)],
-    update: bool = False,
+    force_refresh: bool = False,
+    auto_compile: bool = True,
+    force_compile: bool = False,
     sync_modules: bool = True,
 ) -> dict[str, dict[str, str] | dict[str, dict[str, str]]]:
     """Sync collections declared in collections.yaml.
 
     Reads collections.yaml and ensures all declared collections are installed.
-    Clones missing collections and optionally updates existing ones.
+    Clones missing collections and optionally refreshes existing ones.
     Also syncs modules for all profiles in synced collections.
 
     Args:
         service: Collection service instance
-        update: Whether to update (git pull) existing collections
+        force_refresh: Whether to delete cache and re-clone existing collections
+        auto_compile: Whether to automatically compile profiles after sync
+        force_compile: Whether to force profile recompilation
         sync_modules: Whether to sync modules for profiles in synced collections
 
     Returns:
@@ -118,7 +122,11 @@ async def sync_collections(
         HTTPException: 500 for sync errors
     """
     try:
-        results = service.sync_collections(update=update)
+        results = service.sync_collections(
+            force_refresh=force_refresh,
+            auto_compile=auto_compile,
+            force_compile=force_compile,
+        )
 
         module_results = {}
         if sync_modules:

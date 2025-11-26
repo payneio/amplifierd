@@ -51,7 +51,7 @@ log_level: "info"
 workers: 1
 
 # Data directory root
-amplifierd_root: "/data"
+root_working_dir: "/data"
 ```
 
 Environment variables override YAML settings (prefixed with `AMPLIFIERD_`):

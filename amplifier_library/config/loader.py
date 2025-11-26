@@ -30,7 +30,7 @@ log_level: "info"
 workers: 1
 
 # Data directory root
-amplifierd_root: ".amplifierd"
+root_working_dir: "/data"
 """
 
 

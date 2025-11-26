@@ -24,7 +24,7 @@ class DaemonSettings(BaseSettings):
         port: Listen port (default: 8420)
         log_level: Logging level (default: info)
         workers: Number of workers (default: 1)
-        amplifierd_root: Root directory for data (default: /data)
+        root_working_dir: Root directory for data (default: /data)
 
     Example:
         >>> settings = DaemonSettings()
@@ -44,4 +44,10 @@ class DaemonSettings(BaseSettings):
     port: int = 8420
     log_level: str = "info"
     workers: int = 1
-    amplifierd_root: str = ".amplifierd"
+
+    root_working_dir: str = "/data"
+
+    # Collection sync behavior on startup
+    force_collection_refresh_on_start: bool = False
+    auto_profile_build_on_start: bool = True
+    force_profile_rebuild_on_start: bool = False
