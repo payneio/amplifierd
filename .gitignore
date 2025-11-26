@@ -98,3 +98,4 @@ AMPLIFIER_README.md
 # amplifierd
 .amplifierd/state
 .amplifierd/cache
+.compilation_meta.json

@@ -158,7 +158,7 @@ collections:
 
 **Endpoints:** `/api/v1/collections/*`
 
-### SimpleProfileService
+### ProfileService
 
 Manages profile configurations and activation from flattened profiles directory.
 

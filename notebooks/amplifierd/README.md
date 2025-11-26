@@ -156,6 +156,19 @@ Enhanced session management with mount plan integration:
 
 **Focus**: Complete session lifecycle with mount plans and transcripts
 
+### 08 - Amplified Directories
+**File**: `08-amplified-directories.ipynb`
+
+Multi-directory context management:
+- **Directory Management**: Create, list, update, delete amplified directories
+- **Profile Inheritance**: Child directories inherit `default_profile` from parent
+- **Session Integration**: Sessions tied to specific amplified directories
+- **Root Auto-Amplification**: Root directory auto-amplified on daemon startup
+- **Metadata Schema**: Required `default_profile` + optional user fields
+- **Security**: Path validation prevents directory traversal attacks
+
+**Focus**: Managing multiple working directory contexts with independent settings
+
 ## Learning Path
 
 ### For Quick Start
@@ -164,7 +177,7 @@ Enhanced session management with mount plan integration:
 3. Pick relevant notebooks based on your needs
 
 ### For Complete Understanding
-Work through all notebooks in order (01 → 07).
+Work through all notebooks in order (01 → 08).
 
 ### For Specific Tasks
 - **Managing LLM configurations?** → `03-profile-management.ipynb`
@@ -172,6 +185,7 @@ Work through all notebooks in order (01 → 07).
 - **Understanding module structure?** → `05-module-management.ipynb`
 - **Generating mount plans?** → `06-mount-plan-generation.ipynb`
 - **Managing session lifecycle?** → `07-session-lifecycle.ipynb`
+- **Working with multiple projects?** → `08-amplified-directories.ipynb`
 
 ## API Coverage
 
@@ -186,8 +200,9 @@ Work through all notebooks in order (01 → 07).
 | **Collections** | 2 GET | 1 POST, 1 DELETE |
 | **Modules** | 7 GET | - |
 | **Mount Plans** | 1 GET | 1 POST |
+| **Amplified Directories** | 2 GET | 1 POST, 1 PATCH, 1 DELETE |
 
-**Total**: 30+ endpoints across all operations
+**Total**: 35+ endpoints across all operations
 
 ## Features Demonstrated
 

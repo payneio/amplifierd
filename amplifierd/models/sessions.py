@@ -36,6 +36,7 @@ class SessionMetadata(CamelCaseModel):
 
     session_id: str = Field(description="Unique session identifier")
     parent_session_id: str | None = Field(default=None, description="Parent session ID for sub-sessions")
+    amplified_dir: str = Field(default=".", description="Relative path to amplified directory")
     status: SessionStatus = Field(description="Current session status")
     created_at: datetime = Field(description="Session creation timestamp")
     started_at: datetime | None = Field(default=None, description="Session start timestamp (ACTIVE)")
@@ -71,6 +72,7 @@ class SessionIndexEntry(CamelCaseModel):
     """
 
     session_id: str = Field(description="Session identifier")
+    amplified_dir: str = Field(default=".", description="Relative path to amplified directory")
     status: SessionStatus = Field(description="Current session status")
     profile_name: str = Field(description="Profile used for this session")
     created_at: datetime = Field(description="Session creation timestamp")

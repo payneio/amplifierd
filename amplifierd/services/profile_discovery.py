@@ -184,12 +184,13 @@ class ProfileDiscoveryService:
             # Search specific collection
             collection_cache_dir = self.cache_dir / collection_id
             if collection_cache_dir.exists():
-                profile_files = list(collection_cache_dir.glob("*.md"))
+                # Look for profile manifests in nested profile directories
+                profile_files = list(collection_cache_dir.glob("*/*.md"))
             else:
                 profile_files = []
         else:
-            # Search all collections
-            profile_files = list(self.cache_dir.glob("*/*.md"))
+            # Search all collections - look in nested profile directories
+            profile_files = list(self.cache_dir.glob("*/*/*.md"))
 
         for profile_file in profile_files:
             try:

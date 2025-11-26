@@ -17,12 +17,14 @@ from fastapi import Depends
 from fastapi import HTTPException
 
 from amplifier_library.storage import get_state_dir
+from amplifier_library.storage.paths import get_root_working_dir
 
 from ..models.mount_plans import MountPlan
 from ..models.mount_plans import MountPlanRequest
 from ..models.sessions import SessionMessage
 from ..models.sessions import SessionMetadata
 from ..models.sessions import SessionStatus
+from ..services.amplified_directory_service import AmplifiedDirectoryService
 from ..services.mount_plan_service import MountPlanService
 from ..services.session_state_service import SessionStateService
 from .mount_plans import get_mount_plan_service
@@ -49,7 +51,8 @@ def get_session_state_service() -> SessionStateService:
 async def create_session(
     mount_plan_service: Annotated[MountPlanService, Depends(get_mount_plan_service)],
     session_service: Annotated[SessionStateService, Depends(get_session_state_service)],
-    profile_name: str = Body(..., embed=True),
+    amplified_dir: str = Body(".", embed=True),
+    profile_name: str | None = Body(None, embed=True),
     parent_session_id: str | None = Body(None, embed=True),
     settings_overrides: dict | None = Body(None, embed=True),
 ) -> SessionMetadata:
@@ -59,7 +62,8 @@ async def create_session(
     Session starts in CREATED state and must be explicitly started.
 
     Args:
-        profile_name: Profile to use for session
+        amplified_dir: Relative path to amplified directory (defaults to ".")
+        profile_name: Profile to use for session (if not provided, uses directory's default_profile)
         parent_session_id: Optional parent session for sub-sessions
         settings_overrides: Optional settings to override profile defaults
         mount_plan_service: Mount plan service dependency
@@ -70,13 +74,14 @@ async def create_session(
 
     Raises:
         HTTPException:
-            - 400 if request is invalid
+            - 400 if amplified_dir is not amplified or request is invalid
             - 404 if profile not found
             - 500 for other errors
 
     Example:
         ```json
         {
+            "amplified_dir": "projects/my-project",
             "profile_name": "foundation/base",
             "parent_session_id": "parent-session-123",
             "settings_overrides": {
@@ -86,7 +91,28 @@ async def create_session(
         ```
     """
     try:
-        # Generate mount plan first
+        # Validate amplified directory exists
+        root_dir = get_root_working_dir()
+        amplified_service = AmplifiedDirectoryService(root_dir)
+
+        amplified_directory = amplified_service.get(amplified_dir)
+        if not amplified_directory:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Directory '{amplified_dir}' is not amplified. "
+                "Create it first using POST /amplified-directories/",
+            )
+
+        # If no profile specified, use directory's default_profile
+        if not profile_name:
+            profile_name = amplified_directory.metadata.get("default_profile")
+            if not profile_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No profile specified and directory '{amplified_dir}' has no default_profile in metadata",
+                )
+
+        # Generate mount plan
         request = MountPlanRequest(
             profile_id=profile_name,
             settings_overrides=settings_overrides or {},
@@ -99,11 +125,14 @@ async def create_session(
             profile_name=profile_name,
             mount_plan=mount_plan,
             parent_session_id=parent_session_id,
+            amplified_dir=amplified_dir,
         )
 
-        logger.info(f"Created session {metadata.session_id} with profile {profile_name}")
+        logger.info(f"Created session {metadata.session_id} in '{amplified_dir}' with profile {profile_name}")
         return metadata
 
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

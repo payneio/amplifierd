@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from amplifier_library.config.loader import load_config
 
+from .routers import amplified_directories_router
 from .routers import collections_router
 from .routers import messages_router
 from .routers import modules_router
@@ -41,6 +42,42 @@ async def lifespan(app: FastAPI):
     config = load_config()
     logger.info(f"Starting amplifierd daemon on {config.host}:{config.port}")
     logger.info(f"Data root: {config.root_working_dir}")
+
+    # Auto-amplify root directory on startup
+    try:
+        import os
+
+        from amplifier_library.storage.paths import get_root_working_dir
+
+        from .models.amplified_directories import AmplifiedDirectoryCreate
+        from .services.amplified_directory_service import AmplifiedDirectoryService
+
+        root_dir = get_root_working_dir()
+        amplified_service = AmplifiedDirectoryService(root_dir)
+
+        # Ensure root is amplified
+        if not amplified_service.is_amplified("."):
+            default_profile = os.getenv("AMPLIFIERD_DEFAULT_PROFILE", "foundation/foundation")
+            logger.info(f"Auto-amplifying root directory with profile: {default_profile}")
+
+            amplified_service.create(
+                AmplifiedDirectoryCreate(
+                    relative_path=".",
+                    default_profile=default_profile,
+                    metadata={
+                        "name": "root",
+                        "description": "Root amplified directory (auto-created)",
+                        "auto_created": True,
+                    },
+                    create_marker=True,
+                )
+            )
+            logger.info("Root directory amplified successfully")
+        else:
+            logger.info("Root directory already amplified")
+    except Exception as e:
+        logger.error(f"Failed to auto-amplify root directory: {e}")
+        # Don't fail startup, just log the error
 
     # Sync collections on startup with automatic profile discovery
     try:
@@ -109,6 +146,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(amplified_directories_router)
 app.include_router(sessions_router)
 app.include_router(messages_router)
 app.include_router(status_router)

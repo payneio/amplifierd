@@ -43,6 +43,7 @@ class SessionStateService:
         profile_name: str,
         mount_plan: MountPlan,
         parent_session_id: str | None = None,
+        amplified_dir: str = ".",
     ) -> SessionMetadata:
         """Create new session in CREATED state.
 
@@ -51,6 +52,7 @@ class SessionStateService:
             profile_name: Profile name for this session
             mount_plan: Complete mount plan to persist
             parent_session_id: Optional parent session for sub-sessions
+            amplified_dir: Relative path to amplified directory (defaults to ".")
 
         Returns:
             SessionMetadata for created session
@@ -83,6 +85,7 @@ class SessionStateService:
             now = datetime.now(UTC)
             metadata = SessionMetadata(
                 session_id=session_id,
+                amplified_dir=amplified_dir,
                 profile_name=profile_name,
                 status=SessionStatus.CREATED,
                 created_at=now,
@@ -423,6 +426,7 @@ class SessionStateService:
         # Create SessionIndexEntry from metadata
         entry = SessionIndexEntry(
             session_id=metadata.session_id,
+            amplified_dir=metadata.amplified_dir,
             profile_name=metadata.profile_name,
             status=metadata.status,
             created_at=metadata.created_at,

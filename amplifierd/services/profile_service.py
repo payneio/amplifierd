@@ -114,7 +114,7 @@ class ProfileService:
 
         services_str = f" (with {', '.join(service_status)})" if service_status else ""
         logger.info(
-            f"SimpleProfileService initialized with share_dir={self.share_dir}, data_dir={self.data_dir}{services_str}"
+            f"ProfileService initialized with share_dir={self.share_dir}, data_dir={self.data_dir}{services_str}"
         )
 
     def list_profiles(self) -> list[ProfileInfo]:

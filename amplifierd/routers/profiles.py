@@ -24,7 +24,7 @@ def get_profile_service() -> ProfileService:
     """Get profile service instance with new services.
 
     Returns:
-        SimpleProfileService instance with discovery and compilation services
+        ProfileService instance with discovery and compilation services
     """
     share_dir = get_share_dir()
     data_dir = get_share_dir()
