@@ -5,6 +5,31 @@ from pydantic import Field
 from amplifierd.models.base import CamelCaseModel
 
 
+class CreateProfileRequest(CamelCaseModel):
+    """Request body for creating a new profile."""
+
+    name: str = Field(pattern=r"^[a-z0-9-]+$", description="Profile name (kebab-case)")
+    version: str = Field(default="1.0.0", description="Profile version")
+    description: str = Field(description="Profile description")
+    providers: list["ModuleConfig"] = Field(default_factory=list, description="Provider modules")
+    tools: list["ModuleConfig"] = Field(default_factory=list, description="Tool modules")
+    hooks: list["ModuleConfig"] = Field(default_factory=list, description="Hook modules")
+    orchestrator: "ModuleConfig | None" = Field(default=None, description="Orchestrator module")
+    context: "ModuleConfig | None" = Field(default=None, description="Context manager module")
+
+
+class UpdateProfileRequest(CamelCaseModel):
+    """Request body for updating a profile. All fields optional."""
+
+    version: str | None = Field(default=None, description="Profile version")
+    description: str | None = Field(default=None, description="Profile description")
+    providers: list["ModuleConfig"] | None = Field(default=None, description="Provider modules")
+    tools: list["ModuleConfig"] | None = Field(default=None, description="Tool modules")
+    hooks: list["ModuleConfig"] | None = Field(default=None, description="Hook modules")
+    orchestrator: "ModuleConfig | None" = Field(default=None, description="Orchestrator module")
+    context: "ModuleConfig | None" = Field(default=None, description="Context manager module")
+
+
 class ProfileInfo(CamelCaseModel):
     """Basic profile information."""
 

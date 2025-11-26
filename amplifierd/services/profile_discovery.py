@@ -98,7 +98,7 @@ class ProfileDiscoveryService:
 
         for profile_file in profile_files:
             try:
-                manifest: ProfileDetails | None = self._parse_profile_manifest(profile_file)
+                manifest: ProfileDetails | None = self._parse_profile_manifest(profile_file, collection_id)
 
                 if manifest is None:
                     continue
@@ -144,7 +144,7 @@ class ProfileDiscoveryService:
             return None
 
         try:
-            manifest = self._parse_profile_manifest(cache_file)
+            manifest = self._parse_profile_manifest(cache_file, collection_id)
             if manifest:
                 return manifest
 
@@ -194,7 +194,9 @@ class ProfileDiscoveryService:
 
         for profile_file in profile_files:
             try:
-                manifest = self._parse_profile_manifest(profile_file)
+                # Extract collection_id from cache path structure: cache_dir/collection_id/profile_id/*.md
+                collection_id_from_path = profile_file.parts[-3] if len(profile_file.parts) >= 3 else None
+                manifest = self._parse_profile_manifest(profile_file, collection_id_from_path)
                 if manifest:
                     cached_profiles.append(manifest)
             except Exception as e:
@@ -244,7 +246,7 @@ class ProfileDiscoveryService:
 
         return valid_profiles
 
-    def _parse_profile_manifest(self, profile_file: Path) -> ProfileDetails | None:
+    def _parse_profile_manifest(self, profile_file: Path, collection_id: str | None = None) -> ProfileDetails | None:
         """
         Parse profile YAML frontmatter.
 
@@ -254,6 +256,7 @@ class ProfileDiscoveryService:
 
         Args:
             profile_file: Path to profile .md file
+            collection_id: Optional collection identifier to set on the profile
 
         Returns:
             ProfileDetails if valid schema v2 profile, None otherwise
@@ -419,7 +422,7 @@ class ProfileDiscoveryService:
                 schema_version=schema_version,
                 version=version,
                 description=description,
-                collection_id=None,  # Set by caller if needed
+                collection_id=collection_id,  # Set from discovery/cache
                 source="collection",  # Profiles discovered from collections
                 is_active=False,  # Activation status set elsewhere
                 providers=providers,

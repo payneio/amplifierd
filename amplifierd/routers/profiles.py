@@ -1,5 +1,6 @@
 """Profile management API endpoints."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter
@@ -12,10 +13,14 @@ from amplifier_library.storage.paths import get_profiles_dir
 
 from ..models import ProfileDetails
 from ..models import ProfileInfo
+from ..models.profiles import CreateProfileRequest
+from ..models.profiles import UpdateProfileRequest
 from ..services.profile_compilation import ProfileCompilationService
 from ..services.profile_discovery import ProfileDiscoveryService
 from ..services.profile_service import ProfileService
 from ..services.ref_resolution import RefResolutionService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"])
 
@@ -58,6 +63,37 @@ async def list_profiles(
     return service.list_profiles()
 
 
+@router.post("/", response_model=ProfileDetails, status_code=201)
+async def create_profile(
+    request: CreateProfileRequest,
+    service: Annotated[ProfileService, Depends(get_profile_service)],
+) -> ProfileDetails:
+    """Create a new profile in local collection.
+
+    Args:
+        request: Profile creation request
+        service: Profile service instance
+
+    Returns:
+        Created profile details
+
+    Raises:
+        HTTPException:
+            - 409 if profile already exists
+            - 400 for validation errors
+            - 500 for other errors
+    """
+    try:
+        return service.create_profile(request)
+    except ValueError as exc:
+        if "already exists" in str(exc):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Failed to create profile: {exc}")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
 @router.get("/active", response_model=ProfileDetails | None)
 async def get_active_profile(
     service: Annotated[ProfileService, Depends(get_profile_service)],
@@ -98,6 +134,98 @@ async def get_profile(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.patch("/{name}", response_model=ProfileDetails)
+async def update_profile(
+    name: str,
+    request: UpdateProfileRequest,
+    service: Annotated[ProfileService, Depends(get_profile_service)],
+) -> ProfileDetails:
+    """Update an existing local profile.
+
+    Args:
+        name: Profile name
+        request: Update request
+        service: Profile service instance
+
+    Returns:
+        Updated profile details
+
+    Raises:
+        HTTPException:
+            - 404 if profile not found
+            - 403 if profile not in local collection
+            - 400 for validation errors
+            - 500 for other errors
+    """
+    try:
+        return service.update_profile(name, request)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        if "Cannot modify" in str(exc):
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Failed to update profile {name}: {exc}")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.delete("/active", status_code=200)
+async def deactivate_profile(
+    service: Annotated[ProfileService, Depends(get_profile_service)],
+) -> dict[str, bool]:
+    """Deactivate the current profile.
+
+    Args:
+        service: Profile service instance
+
+    Returns:
+        Deactivation status
+
+    Raises:
+        HTTPException: 500 for errors
+    """
+    try:
+        service.deactivate_profile()
+        return {"success": True}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to deactivate profile: {str(exc)}") from exc
+
+
+@router.delete("/{name}", status_code=204)
+async def delete_profile(
+    name: str,
+    service: Annotated[ProfileService, Depends(get_profile_service)],
+) -> None:
+    """Delete a local profile.
+
+    Args:
+        name: Profile name
+        service: Profile service instance
+
+    Raises:
+        HTTPException:
+            - 404 if profile not found
+            - 403 if profile not in local collection
+            - 409 if profile is currently active
+            - 500 for other errors
+    """
+    try:
+        service.delete_profile(name)
+        logger.info(f"Deleted profile: {name}")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        if "Cannot modify" in str(exc) or "not local" in str(exc):
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        if "active" in str(exc).lower():
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Failed to delete profile {name}: {exc}")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
 @router.post("/{name}/activate", status_code=200)
 async def activate_profile(
     name: str,
@@ -122,28 +250,6 @@ async def activate_profile(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to activate profile: {str(exc)}") from exc
-
-
-@router.delete("/active", status_code=200)
-async def deactivate_profile(
-    service: Annotated[ProfileService, Depends(get_profile_service)],
-) -> dict[str, bool]:
-    """Deactivate the current profile.
-
-    Args:
-        service: Profile service instance
-
-    Returns:
-        Deactivation status
-
-    Raises:
-        HTTPException: 500 for errors
-    """
-    try:
-        service.deactivate_profile()
-        return {"success": True}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to deactivate profile: {str(exc)}") from exc
 
 
 @router.post("/{name}/sync-modules", status_code=200)

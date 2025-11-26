@@ -10,6 +10,7 @@ for schema v2 profile support.
 from __future__ import annotations
 
 import logging
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,9 +21,11 @@ if TYPE_CHECKING:
     from amplifierd.services.profile_compilation import ProfileCompilationService
     from amplifierd.services.profile_discovery import ProfileDiscoveryService
 
+from amplifierd.models.profiles import CreateProfileRequest
 from amplifierd.models.profiles import ModuleConfig
 from amplifierd.models.profiles import ProfileDetails
 from amplifierd.models.profiles import ProfileInfo
+from amplifierd.models.profiles import UpdateProfileRequest
 
 logger = logging.getLogger(__name__)
 
@@ -143,18 +146,31 @@ class ProfileService:
                             name=profile_detail.name,
                             source=profile_detail.source,
                             is_active=(profile_detail.name == active_name),
+                            collection_id=profile_detail.collection_id,
+                            schema_version=profile_detail.schema_version,
                         )
                     )
                 logger.debug(f"Added {len(cached_profiles)} cached profiles (schema v2)")
             except Exception as e:
                 logger.error(f"Error listing cached profiles: {e}")
 
-        # Then scan local .yaml files (schema v1 / legacy)
+        # Then scan local .yaml and .md files (schema v1 / legacy and schema v2)
         if not self.profiles_dir.exists():
             logger.warning(f"Profiles directory does not exist: {self.profiles_dir}")
             return profiles
 
-        for profile_file in self.profiles_dir.rglob("*.yaml"):
+        # Scan both .yaml (schema v1) and .md (schema v2) files
+        # Only look for profile files in the top 2 levels (collection/profile/*.md)
+        # This skips module documentation nested in providers/tools/hooks subdirectories
+        import itertools
+
+        yaml_files = self.profiles_dir.rglob("*.yaml")
+        # Only scan for .md files that are close to the profiles root (not deeply nested)
+        # Profile structure: profiles/collection/profile-name/profile-name.md
+        # Module docs are deeper: profiles/collection/profile-name/providers/hash/README.md
+        md_files = (f for f in self.profiles_dir.rglob("*.md") if len(f.relative_to(self.profiles_dir).parts) <= 3)
+
+        for profile_file in itertools.chain(yaml_files, md_files):
             if not profile_file.is_file():
                 continue
 
@@ -182,7 +198,9 @@ class ProfileService:
                     )
                 )
             except Exception as e:
-                logger.error(f"Error loading profile {profile_file}: {e}")
+                # Skip files that aren't valid profiles (README, docs, etc.)
+                # Only log at debug level since this is expected for non-profile markdown files
+                logger.debug(f"Skipping {profile_file.name}: not a valid profile ({e})")
 
         logger.info(f"Found {len(profiles)} total profiles")
         return profiles
@@ -233,13 +251,14 @@ class ProfileService:
 
         active_name = self._read_active_profile()
         source = self._get_profile_source(profile_file)
+        collection_id = _get_collection_from_source(source)
 
         return ProfileDetails(
             name=profile_data.name,
             schema_version=profile_data.schema_version,
             version=profile_data.version,
             description=profile_data.description,
-            collection_id=None,
+            collection_id=collection_id,
             source=source,
             is_active=(profile_data.name == active_name),
             providers=self._convert_module_configs(profile_data.providers or []),
@@ -287,6 +306,8 @@ class ProfileService:
     def _find_profile_file(self, name: str) -> Path:
         """Find profile file by name across all profiles.
 
+        Searches for both .yaml (schema v1) and .md (schema v2) profile files.
+
         Args:
             name: Profile name
 
@@ -296,24 +317,30 @@ class ProfileService:
         Raises:
             FileNotFoundError: If profile not found
         """
-        for profile_file in self.profiles_dir.rglob("*.yaml"):
-            if not profile_file.is_file():
-                continue
+        # Search for both .yaml and .md files
+        for pattern in ["*.yaml", "*.md"]:
+            for profile_file in self.profiles_dir.rglob(pattern):
+                if not profile_file.is_file():
+                    continue
 
-            try:
-                profile_data = self._load_profile_file(profile_file)
-                if profile_data.name == name:
-                    return profile_file
-            except Exception:
-                continue
+                try:
+                    profile_data = self._load_profile_file(profile_file)
+                    if profile_data.name == name:
+                        return profile_file
+                except Exception:
+                    continue
 
         raise FileNotFoundError(f"Profile not found: {name}")
 
     def _load_profile_file(self, profile_file: Path) -> ProfileData:
-        """Load profile data from YAML file.
+        """Load profile data from YAML or markdown file.
+
+        Supports both:
+        - .yaml files (schema v1): Pure YAML
+        - .md files (schema v2): YAML frontmatter + markdown body
 
         Args:
-            profile_file: Path to profile YAML file
+            profile_file: Path to profile file (.yaml or .md)
 
         Returns:
             ProfileData object
@@ -323,7 +350,20 @@ class ProfileService:
         """
         try:
             with open(profile_file) as f:
-                data = yaml.safe_load(f)
+                content = f.read()
+
+            # Check if it's a markdown file with frontmatter
+            if profile_file.suffix == ".md" and content.startswith("---\n"):
+                # Extract YAML frontmatter from markdown
+                parts = content.split("---\n", 2)
+                if len(parts) >= 3:
+                    yaml_content = parts[1]
+                    data = yaml.safe_load(yaml_content)
+                else:
+                    raise ValueError(f"Invalid markdown frontmatter in {profile_file}")
+            else:
+                # Pure YAML file
+                data = yaml.safe_load(content)
 
             if not data or not isinstance(data, dict):
                 raise ValueError(f"Invalid profile YAML: {profile_file}")
@@ -335,16 +375,32 @@ class ProfileService:
             if "name" not in profile:
                 raise ValueError(f"Missing 'name' in profile section: {profile_file}")
 
+            # Extract schema_version from profile section
+            schema_version = profile.get("schema_version", 1)
+
+            # For schema v2, orchestrator and context are in session section
+            orchestrator = None
+            context = None
+            if schema_version == 2 and "session" in data:
+                session = data["session"]
+                orchestrator = session.get("orchestrator")
+                context = session.get("context")
+            else:
+                # Schema v1 or legacy: orchestrator/context at root level
+                orchestrator = data.get("orchestrator")
+                context = data.get("context")
+
             return ProfileData(
                 name=profile["name"],
                 version=profile.get("version", "0.0.0"),
                 description=profile.get("description", ""),
+                schema_version=schema_version,
                 extends=profile.get("extends"),
                 providers=data.get("providers", []),
                 tools=data.get("tools", []),
                 hooks=data.get("hooks", []),
-                orchestrator=data.get("orchestrator"),
-                context=data.get("context"),
+                orchestrator=orchestrator,
+                context=context,
             )
         except yaml.YAMLError as e:
             raise ValueError(f"Failed to parse YAML file {profile_file}: {e}")
@@ -539,3 +595,205 @@ class ProfileService:
 
         logger.info(f"Profile compiled and activated: {profile.name} → {compiled_path}")
         return compiled_path
+
+    def create_profile(self, request: CreateProfileRequest) -> ProfileDetails:
+        """Create new profile in local collection.
+
+        Args:
+            request: Profile creation request
+
+        Returns:
+            Created profile details
+
+        Raises:
+            ValueError: If profile name already exists
+        """
+        from amplifierd.models.profiles import CreateProfileRequest
+
+        if not isinstance(request, CreateProfileRequest):
+            request = CreateProfileRequest(**request)
+
+        existing_profiles = self.list_profiles()
+        if any(p.name == request.name for p in existing_profiles):
+            raise ValueError(f"Profile '{request.name}' already exists")
+
+        local_profile_dir = self.profiles_dir / "local" / request.name
+        local_profile_dir.mkdir(parents=True, exist_ok=True)
+
+        profile_details = ProfileDetails(
+            name=request.name,
+            schema_version=2,
+            version=request.version,
+            description=request.description,
+            collection_id="local",
+            source=f"local/profiles/{request.name}.md",
+            is_active=False,
+            providers=request.providers,
+            tools=request.tools,
+            hooks=request.hooks,
+        )
+
+        manifest_content = self._generate_profile_manifest(profile_details, request.orchestrator, request.context)
+        manifest_file = local_profile_dir / "profile.md"
+        manifest_file.write_text(manifest_content)
+
+        logger.info(f"Created local profile: {request.name}")
+        return profile_details
+
+    def update_profile(self, name: str, request: UpdateProfileRequest) -> ProfileDetails:
+        """Update existing local profile.
+
+        Args:
+            name: Profile name
+            request: Update request with partial fields
+
+        Returns:
+            Updated profile details
+
+        Raises:
+            FileNotFoundError: If profile not found
+            ValueError: If profile not in local collection
+        """
+        from amplifierd.models.profiles import UpdateProfileRequest
+
+        if not isinstance(request, UpdateProfileRequest):
+            request = UpdateProfileRequest(**request)
+
+        current = self.get_profile(name)
+
+        self._validate_local_ownership(current)
+
+        updated = ProfileDetails(
+            name=current.name,
+            schema_version=current.schema_version,
+            version=request.version if request.version is not None else current.version,
+            description=request.description if request.description is not None else current.description,
+            collection_id=current.collection_id,
+            source=current.source,
+            is_active=current.is_active,
+            providers=request.providers if request.providers is not None else current.providers,
+            tools=request.tools if request.tools is not None else current.tools,
+            hooks=request.hooks if request.hooks is not None else current.hooks,
+        )
+
+        orchestrator = request.orchestrator if request.orchestrator is not None else None
+        context = request.context if request.context is not None else None
+
+        local_profile_dir = self.profiles_dir / "local" / name
+        manifest_content = self._generate_profile_manifest(updated, orchestrator, context)
+        manifest_file = local_profile_dir / "profile.md"
+        manifest_file.write_text(manifest_content)
+
+        logger.info(f"Updated local profile: {name}")
+        return updated
+
+    def delete_profile(self, name: str) -> None:
+        """Delete local profile.
+
+        Args:
+            name: Profile name
+
+        Raises:
+            FileNotFoundError: If profile not found
+            ValueError: If profile not local or is active
+        """
+        profile = self.get_profile(name)
+
+        self._validate_local_ownership(profile)
+
+        if profile.is_active:
+            raise ValueError(f"Cannot delete active profile '{name}'. Deactivate it first.")
+
+        local_profile_dir = self.profiles_dir / "local" / name
+        if local_profile_dir.exists():
+            shutil.rmtree(local_profile_dir)
+            logger.info(f"Deleted local profile: {name}")
+        else:
+            raise FileNotFoundError(f"Profile directory not found: {name}")
+
+    def _validate_local_ownership(self, profile: ProfileDetails) -> None:
+        """Ensure profile is in local collection.
+
+        Args:
+            profile: Profile to validate
+
+        Raises:
+            ValueError: If profile not in local collection
+        """
+        collection_id = profile.collection_id or self._extract_collection_from_source(profile.source)
+
+        if collection_id != "local":
+            raise ValueError(
+                f"Cannot modify profile '{profile.name}' from collection '{collection_id}'. "
+                "Only profiles in 'local' collection can be modified."
+            )
+
+    def _extract_collection_from_source(self, source: str) -> str | None:
+        """Extract collection ID from source path."""
+        parts = source.split("/")
+        if len(parts) > 0 and parts[0]:
+            return parts[0]
+        return None
+
+    def _generate_profile_manifest(
+        self, profile: ProfileDetails, orchestrator: ModuleConfig | None = None, context: ModuleConfig | None = None
+    ) -> str:
+        """Generate .md file content with YAML frontmatter.
+
+        Args:
+            profile: Profile details
+            orchestrator: Orchestrator module config
+            context: Context module config
+
+        Returns:
+            Markdown content with YAML frontmatter
+        """
+        session_data: dict[str, object] = {}
+
+        if orchestrator:
+            session_data["orchestrator"] = {
+                "module": orchestrator.module,
+                "source": orchestrator.source,
+                "config": orchestrator.config or {},
+            }
+
+        if context:
+            session_data["context"] = {
+                "module": context.module,
+                "source": context.source,
+                "config": context.config or {},
+            }
+
+        yaml_data: dict[str, object] = {
+            "profile": {
+                "name": profile.name,
+                "schema_version": profile.schema_version,
+                "version": profile.version,
+                "description": profile.description,
+            },
+            "session": session_data,
+        }
+
+        if profile.providers:
+            yaml_data["providers"] = [
+                {"module": p.module, "source": p.source, **({"config": p.config} if p.config else {})}
+                for p in profile.providers
+            ]
+
+        if profile.tools:
+            yaml_data["tools"] = [
+                {"module": t.module, "source": t.source, **({"config": t.config} if t.config else {})}
+                for t in profile.tools
+            ]
+
+        if profile.hooks:
+            yaml_data["hooks"] = [
+                {"module": h.module, "source": h.source, **({"config": h.config} if h.config else {})}
+                for h in profile.hooks
+            ]
+
+        yaml_content = yaml.dump(yaml_data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+
+        markdown_body = f"# {profile.name}\n\n{profile.description}\n"
+
+        return f"---\n{yaml_content}---\n\n{markdown_body}"
