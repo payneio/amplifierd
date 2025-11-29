@@ -37,7 +37,7 @@ tools:
   source: git+https://github.com/microsoft/amplifier-module-tool-todo@main
 hooks:
 - module: hooks-status-context
-  source: git+https://github.com/microsoft/amplifier-module-hooks-status-context@main
+  source: git+https://github.com/payneio/amplifierd@main#subdirectory=registry/hooks/hooks-status-context
   config:
     include_datetime: true
     datetime_include_timezone: false
