@@ -99,3 +99,8 @@ AMPLIFIER_README.md
 .amplifierd/state
 .amplifierd/cache
 .compilation_meta.json
+
+# temporary ignores during development
+.amplifierd/share/profiles
+
+
