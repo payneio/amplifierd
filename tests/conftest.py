@@ -205,6 +205,12 @@ def mock_amplifier_module():
         ...     # Returns mock data, no actual API calls
     """
 
+    class MockCoordinator:
+        """Mock coordinator with mount method."""
+
+        async def mount(self, mount_point: str, module: Any) -> None:
+            """Mock mount - does nothing."""
+
     class MockAmplifierSession:
         """Mock AmplifierSession for testing without LLM API calls."""
 
@@ -214,6 +220,7 @@ def mock_amplifier_module():
             self.args = args
             self.kwargs = kwargs
             self.messages: list[dict[str, str]] = []
+            self.coordinator = MockCoordinator()
 
         async def initialize(self) -> None:
             """Mock initialization."""
@@ -242,6 +249,15 @@ def mock_amplifier_module():
     # Create mock module
     mock_module = types.ModuleType("amplifier_core")
     mock_module.AmplifierSession = MockAmplifierSession  # type: ignore
+
+    # Add ModuleLoader mock (simple class that does nothing)
+    class MockModuleLoader:
+        def __init__(self, *args, **kwargs):
+            """Mock ModuleLoader for testing."""
+            self.args = args
+            self.kwargs = kwargs
+
+    mock_module.ModuleLoader = MockModuleLoader  # type: ignore
 
     # Inject into sys.modules
     sys.modules["amplifier_core"] = mock_module

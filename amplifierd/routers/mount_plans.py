@@ -11,28 +11,18 @@ from amplifier_library.storage import get_share_dir
 from ..models.mount_plans import MountPlan
 from ..models.mount_plans import MountPlanRequest
 from ..services.mount_plan_service import MountPlanService
-from ..services.profile_service import ProfileService
-from .profiles import get_profile_service
 
 router = APIRouter(prefix="/api/v1/mount-plans", tags=["mount-plans"])
 
 
-def get_mount_plan_service(
-    profile_service: Annotated[ProfileService, Depends(get_profile_service)],
-) -> MountPlanService:
+def get_mount_plan_service() -> MountPlanService:
     """Get mount plan service instance.
-
-    Args:
-        profile_service: Profile service instance from dependency
 
     Returns:
         MountPlanService instance
     """
     share_dir = get_share_dir()
-    return MountPlanService(
-        profile_service=profile_service,
-        share_dir=share_dir,
-    )
+    return MountPlanService(share_dir=share_dir)
 
 
 @router.post("/generate", response_model=MountPlan, status_code=201)
@@ -71,7 +61,10 @@ async def generate_mount_plan(
         ```
     """
     try:
-        return await service.generate_mount_plan(request)
+        mount_plan_dict = service.generate_mount_plan(request.profile_id)
+        # Convert dict to MountPlan model for API response
+        # For now, return the dict directly since we're transitioning to dict-based plans
+        return mount_plan_dict  # type: ignore[return-value]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

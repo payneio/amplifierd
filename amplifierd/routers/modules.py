@@ -26,7 +26,7 @@ def get_module_discovery_service() -> ModuleService:
     """Get module discovery service instance.
 
     Returns:
-        SimpleModuleService instance
+        ModuleService instance
     """
     from amplifier_library.storage import get_share_dir
 
@@ -157,7 +157,7 @@ async def add_module_source(
     Raises:
         HTTPException: 501 Not Implemented
     """
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.put("/{module_id}/sources", status_code=200)
@@ -179,7 +179,7 @@ async def update_module_source(
     Raises:
         HTTPException: 501 Not Implemented
     """
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.delete("/{module_id}/sources", status_code=200)
@@ -201,7 +201,7 @@ async def remove_module_source(
     Raises:
         HTTPException: 501 Not Implemented
     """
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 # Type-specific convenience endpoints
@@ -215,7 +215,7 @@ async def add_provider_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Add a provider module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.put("/providers/{module_id}/sources", status_code=200)
@@ -225,7 +225,7 @@ async def update_provider_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Update a provider module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.delete("/providers/{module_id}/sources", status_code=200)
@@ -235,7 +235,7 @@ async def remove_provider_source(
     scope: str = "project",
 ) -> dict[str, bool]:
     """Remove a provider module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 # HOOKS
@@ -246,7 +246,7 @@ async def add_hook_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Add a hook module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.put("/hooks/{module_id}/sources", status_code=200)
@@ -256,7 +256,7 @@ async def update_hook_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Update a hook module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.delete("/hooks/{module_id}/sources", status_code=200)
@@ -266,7 +266,7 @@ async def remove_hook_source(
     scope: str = "project",
 ) -> dict[str, bool]:
     """Remove a hook module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 # TOOLS
@@ -277,7 +277,7 @@ async def add_tool_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Add a tool module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.put("/tools/{module_id}/sources", status_code=200)
@@ -287,7 +287,7 @@ async def update_tool_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Update a tool module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.delete("/tools/{module_id}/sources", status_code=200)
@@ -297,7 +297,7 @@ async def remove_tool_source(
     scope: str = "project",
 ) -> dict[str, bool]:
     """Remove a tool module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 # ORCHESTRATORS
@@ -308,7 +308,7 @@ async def add_orchestrator_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Add an orchestrator module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.put("/orchestrators/{module_id}/sources", status_code=200)
@@ -318,7 +318,7 @@ async def update_orchestrator_source(
     service: Annotated[ModuleService, Depends(get_module_discovery_service)],
 ) -> dict[str, str]:
     """Update an orchestrator module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")
 
 
 @router.delete("/orchestrators/{module_id}/sources", status_code=200)
@@ -328,4 +328,4 @@ async def remove_orchestrator_source(
     scope: str = "project",
 ) -> dict[str, bool]:
     """Remove an orchestrator module source override."""
-    raise HTTPException(status_code=501, detail="Module source management not implemented in SimpleModuleService")
+    raise HTTPException(status_code=501, detail="Module source management not implemented in ModuleService")

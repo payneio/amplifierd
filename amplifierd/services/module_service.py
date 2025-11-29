@@ -47,7 +47,7 @@ class ModuleService:
         """
         self.share_dir = Path(share_dir)
         self.modules_dir = self.share_dir / "modules"
-        logger.info(f"SimpleModuleService initialized with share_dir={self.share_dir}")
+        logger.info(f"ModuleService initialized with share_dir={self.share_dir}")
 
     def list_modules(self, type_filter: str | None = None) -> list[ModuleInfo]:
         """List all modules, optionally filtered by type.

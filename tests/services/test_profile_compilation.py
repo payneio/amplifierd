@@ -48,9 +48,7 @@ def sample_profile() -> ProfileDetails:
             "git+https://github.com/org/repo@main/agents/agent1.md",
             "git+https://github.com/org/repo@main/agents/agent2.md",
         ],
-        context=[
-            "git+https://github.com/org/repo@main/context-docs",
-        ],
+        context={"project-docs": "git+https://github.com/org/repo@main/context-docs"},
         providers=[
             ModuleConfig(
                 module="provider-anthropic",
@@ -171,7 +169,7 @@ class TestProfileCompilationService:
         assert (compiled_path / "__init__.py").exists()
 
         # Check all expected subdirectories exist
-        for subdir in ["orchestrator", "agents", "context", "tools", "hooks", "providers"]:
+        for subdir in ["orchestrator", "contexts", "agents", "contexts", "tools", "hooks", "providers"]:
             subdir_path = compiled_path / subdir
             assert subdir_path.exists(), f"Missing {subdir}/ directory"
             assert (subdir_path / "__init__.py").exists(), f"Missing {subdir}/__init__.py"
@@ -179,10 +177,12 @@ class TestProfileCompilationService:
         # Verify assets were copied
         assert (compiled_path / "agents" / "agent1.md").exists()
         assert (compiled_path / "agents" / "agent2.md").exists()
-        assert (compiled_path / "context" / "context-docs").is_dir()
-        assert (compiled_path / "tools" / "bash.py").exists()
-        assert (compiled_path / "tools" / "tool.py").exists()
-        assert (compiled_path / "providers" / "provider.py").exists()
+        # Context key in profile is "project-docs", so directory should be contexts/project-docs/
+        assert (compiled_path / "contexts" / "project-docs").is_dir()
+        # Tools and providers are now in module-named subdirectories
+        assert (compiled_path / "tools" / "tool-bash" / "bash.py").exists()
+        assert (compiled_path / "tools" / "tool-fs" / "tool.py").exists()
+        assert (compiled_path / "providers" / "provider-anthropic" / "provider.py").exists()
 
     def test_compile_profile_cleans_up_on_failure(
         self, compilation_service: ProfileCompilationService, sample_profile: ProfileDetails
@@ -320,13 +320,16 @@ class TestRefResolution:
 class TestModuleStructure:
     """Tests for _create_module_structure method."""
 
-    def test_create_empty_structure(self, compilation_service: ProfileCompilationService, tmp_path: Path) -> None:
+    def test_create_empty_structure(
+        self, compilation_service: ProfileCompilationService, sample_profile: ProfileDetails, tmp_path: Path
+    ) -> None:
         """Test creating module structure with no assets."""
         target_dir = tmp_path / "compiled"
         target_dir.mkdir()
 
         assets: dict[str, list[Path]] = {
             "orchestrator": [],
+            "context-manager": [],
             "agents": [],
             "context": [],
             "tools": [],
@@ -334,45 +337,49 @@ class TestModuleStructure:
             "providers": [],
         }
 
-        compilation_service._create_module_structure(target_dir, assets)
+        compilation_service._create_module_structure(target_dir, assets, sample_profile)
 
         # Verify root __init__.py
         assert (target_dir / "__init__.py").exists()
 
-        # Verify all subdirectories created with __init__.py
-        for subdir in assets:
-            assert (target_dir / subdir).is_dir()
-            assert (target_dir / subdir / "__init__.py").exists()
+        # Verify empty subdirectories created with __init__.py
+        assert (target_dir / "tools").is_dir()
+        assert (target_dir / "tools" / "__init__.py").exists()
+        assert (target_dir / "hooks").is_dir()
+        assert (target_dir / "hooks" / "__init__.py").exists()
+        assert (target_dir / "providers").is_dir()
+        assert (target_dir / "providers" / "__init__.py").exists()
 
-    def test_copy_single_files(self, compilation_service: ProfileCompilationService, tmp_path: Path) -> None:
+    def test_copy_single_files(
+        self, compilation_service: ProfileCompilationService, sample_profile: ProfileDetails, tmp_path: Path
+    ) -> None:
         """Test copying single file assets."""
         target_dir = tmp_path / "compiled"
         target_dir.mkdir()
 
         # Create test assets
-        tool_file = tmp_path / "tool.py"
-        tool_file.write_text("# Tool code")
         agent_file = tmp_path / "agent.md"
         agent_file.write_text("# Agent docs")
 
         assets: dict[str, list[Path]] = {
             "orchestrator": [],
+            "context-manager": [],
             "agents": [agent_file],
             "context": [],
-            "tools": [tool_file],
+            "tools": [],
             "hooks": [],
             "providers": [],
         }
 
-        compilation_service._create_module_structure(target_dir, assets)
+        compilation_service._create_module_structure(target_dir, assets, sample_profile)
 
-        # Verify files copied
-        assert (target_dir / "tools" / "tool.py").exists()
-        assert (target_dir / "tools" / "tool.py").read_text() == "# Tool code"
+        # Verify agent file copied
         assert (target_dir / "agents" / "agent.md").exists()
         assert (target_dir / "agents" / "agent.md").read_text() == "# Agent docs"
 
-    def test_copy_directories(self, compilation_service: ProfileCompilationService, tmp_path: Path) -> None:
+    def test_copy_directories(
+        self, compilation_service: ProfileCompilationService, sample_profile: ProfileDetails, tmp_path: Path
+    ) -> None:
         """Test copying directory assets."""
         target_dir = tmp_path / "compiled"
         target_dir.mkdir()
@@ -388,6 +395,7 @@ class TestModuleStructure:
 
         assets: dict[str, list[Path]] = {
             "orchestrator": [],
+            "context-manager": [],
             "agents": [],
             "context": [context_dir],
             "tools": [],
@@ -395,46 +403,51 @@ class TestModuleStructure:
             "providers": [],
         }
 
-        compilation_service._create_module_structure(target_dir, assets)
+        compilation_service._create_module_structure(target_dir, assets, sample_profile)
 
         # Verify directory copied with all files
-        copied_dir = target_dir / "context" / "context-docs"
+        # Uses profile key name "project-docs" not asset dir name "context-docs"
+        copied_dir = target_dir / "contexts" / "project-docs"
         assert copied_dir.is_dir()
         assert (copied_dir / "doc1.md").exists()
         assert (copied_dir / "doc2.md").exists()
         assert (copied_dir / "subdir" / "doc3.md").exists()
 
-    def test_mixed_assets(self, compilation_service: ProfileCompilationService, tmp_path: Path) -> None:
+    def test_mixed_assets(
+        self, compilation_service: ProfileCompilationService, sample_profile: ProfileDetails, tmp_path: Path
+    ) -> None:
         """Test copying mix of files and directories."""
         target_dir = tmp_path / "compiled"
         target_dir.mkdir()
 
-        # Create files
-        tool1 = tmp_path / "tool1.py"
-        tool1.write_text("# Tool 1")
-        tool2 = tmp_path / "tool2.py"
-        tool2.write_text("# Tool 2")
+        # Create agent files
+        agent1 = tmp_path / "agent1.md"
+        agent1.write_text("# Agent 1")
+        agent2 = tmp_path / "agent2.md"
+        agent2.write_text("# Agent 2")
 
-        # Create directory
-        agent_dir = tmp_path / "agents-pkg"
-        agent_dir.mkdir()
-        (agent_dir / "agent1.md").write_text("# Agent 1")
-        (agent_dir / "agent2.md").write_text("# Agent 2")
+        # Create context directory
+        context_dir = tmp_path / "context-docs"
+        context_dir.mkdir()
+        (context_dir / "doc1.md").write_text("# Doc 1")
+        (context_dir / "doc2.md").write_text("# Doc 2")
 
         assets: dict[str, list[Path]] = {
             "orchestrator": [],
-            "agents": [agent_dir],
-            "context": [],
-            "tools": [tool1, tool2],
+            "context-manager": [],
+            "agents": [agent1, agent2],
+            "context": [context_dir],
+            "tools": [],
             "hooks": [],
             "providers": [],
         }
 
-        compilation_service._create_module_structure(target_dir, assets)
+        compilation_service._create_module_structure(target_dir, assets, sample_profile)
 
         # Verify all assets copied
-        assert (target_dir / "tools" / "tool1.py").exists()
-        assert (target_dir / "tools" / "tool2.py").exists()
-        assert (target_dir / "agents" / "agents-pkg").is_dir()
-        assert (target_dir / "agents" / "agents-pkg" / "agent1.md").exists()
-        assert (target_dir / "agents" / "agents-pkg" / "agent2.md").exists()
+        assert (target_dir / "agents" / "agent1.md").exists()
+        assert (target_dir / "agents" / "agent2.md").exists()
+        # Uses profile key name "project-docs" from sample_profile fixture
+        assert (target_dir / "contexts" / "project-docs").is_dir()
+        assert (target_dir / "contexts" / "project-docs" / "doc1.md").exists()
+        assert (target_dir / "contexts" / "project-docs" / "doc2.md").exists()

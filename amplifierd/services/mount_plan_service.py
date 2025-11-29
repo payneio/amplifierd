@@ -1,256 +1,229 @@
-"""Mount plan service for generating session mount plans from cached profiles.
+"""Mount plan service for generating session mount plans from profile frontmatter.
 
-This service transforms cached profile resources into mount plans that amplifier-core
-can use to initialize sessions. It handles:
-- Converting manifest resources to mount points (embedded or referenced)
-- Module ID generation with collision handling
-- Session configuration creation
-- Resource discovery in cache directories
+This service reads profile YAML frontmatter and generates dict-based mount plans
+that amplifier-core can use to initialize sessions with the DaemonModuleSourceResolver.
 """
 
 import logging
-import uuid
-from datetime import UTC
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
-if TYPE_CHECKING:
-    from amplifierd.services.profile_service import ProfileService
-
-from amplifierd.models.mount_plans import EmbeddedMount
-from amplifierd.models.mount_plans import MountPlan
-from amplifierd.models.mount_plans import MountPlanRequest
-from amplifierd.models.mount_plans import MountPoint
-from amplifierd.models.mount_plans import ReferencedMount
-from amplifierd.models.mount_plans import SessionConfig
+import yaml
 
 logger = logging.getLogger(__name__)
 
 
 class MountPlanService:
-    """Service for generating mount plans from cached profiles.
+    """Service for generating mount plans from profile YAML frontmatter.
 
-    Transforms cached profile resources into structured mount plans that specify
-    how to assemble a session. Handles both embedded content (agents, context)
-    and referenced modules (providers, tools, hooks).
-
-    The service discovers resources in the profile cache directory and converts
-    them to appropriate mount point types based on their purpose.
+    Reads profile.md YAML frontmatter and transforms it into dict-based mount plans
+    using profile hint format (source: "collection/profile") that the resolver understands.
     """
 
-    def __init__(
-        self,
-        profile_service: "ProfileService",
-        share_dir: Path,
-    ) -> None:
+    def __init__(self, share_dir: Path) -> None:
         """Initialize mount plan service.
 
         Args:
-            profile_service: ProfileService for getting profile data
-            share_dir: Path to share directory (for finding cached resources)
+            share_dir: Path to share directory (for finding cached profiles)
         """
-        self.profile_service = profile_service
         self.share_dir = Path(share_dir)
         logger.info(f"MountPlanService initialized with share_dir={self.share_dir}")
 
-    async def generate_mount_plan(self, request: MountPlanRequest) -> MountPlan:
-        """Generate mount plan from cached profile.
+    def generate_mount_plan(self, profile_id: str) -> dict[str, Any]:
+        """Generate mount plan from profile frontmatter.
 
-        Takes a mount plan request and generates a complete mount plan by:
-        1. Loading the cached profile details
-        2. Finding all cached resources in the profile directory
-        3. Converting resources to appropriate mount points (embedded or referenced)
-        4. Creating session configuration
-        5. Organizing mount points by type
+        Reads profile.md YAML frontmatter and transforms it into dict-based mount plan
+        with profile hint format for source fields (e.g., "foundation/base").
 
         Args:
-            request: MountPlanRequest with profile_id and optional settings
+            profile_id: Profile ID in format "collection/profile" (e.g., "foundation/base")
 
         Returns:
-            MountPlan with all resources mounted and organized by type
+            Dict mount plan with session, providers, tools, hooks, agents sections
 
         Raises:
             ValueError: If profile_id format is invalid
-            FileNotFoundError: If profile not found or expected resources missing
+            FileNotFoundError: If profile not found in cache
         """
-        logger.info(f"Generating mount plan for profile: {request.profile_id}")
+        logger.info(f"Generating mount plan for profile: {profile_id}")
 
-        # Parse profile_id (format: "collection/profile" e.g., "foundation/base")
-        parts = request.profile_id.split("/")
+        # Parse profile_id
+        parts = profile_id.split("/")
         if len(parts) != 2:
             raise ValueError(
-                f"Invalid profile_id format: {request.profile_id}. "
+                f"Invalid profile_id format: {profile_id}. "
                 "Expected format: collection/profile (e.g., 'foundation/base')"
             )
         collection_id, profile_name = parts
 
-        # Find profile cache directory
+        # Find cached profile directory
         profile_dir = self.share_dir / "profiles" / collection_id / profile_name
         if not profile_dir.exists():
             raise FileNotFoundError(
-                f"Profile cache directory not found: {profile_dir}. "
-                f"Profile {request.profile_id} must be compiled/cached first."
+                f"Profile cache directory not found: {profile_dir}. Profile {profile_id} must be compiled/cached first."
             )
 
         logger.debug(f"Using profile cache directory: {profile_dir}")
 
-        # Generate session ID if not provided
-        session_id = request.session_id or f"session_{uuid.uuid4().hex[:8]}"
-        created_at = datetime.now(UTC).isoformat()
+        # Read agents directory if it exists
+        agents_dict = self._load_agents(profile_dir / "agents", profile_id)
 
-        logger.debug(f"Session ID: {session_id}, created_at: {created_at}")
-
-        # Create session config
-        session_config = SessionConfig(
-            session_id=session_id,
-            profile_id=request.profile_id,
-            parent_session_id=request.parent_session_id,
-            settings=request.settings_overrides,
-            created_at=created_at,
+        # Find profile.md in the registry (source)
+        # The cached profile directory mirrors the registry structure
+        # Use profile_id to construct the registry path
+        registry_profile_path = (
+            Path("/data/repos/msft/payneio/amplifierd/registry/profiles") / collection_id / f"{profile_name}.md"
         )
 
-        # Convert cached resources to mount points
-        mount_points: list[MountPoint] = []
-        seen_ids: set[str] = set()
-
-        # Process each resource type
-        for resource_type in ["agents", "context", "providers", "tools", "hooks"]:
-            resources = self._find_resources(profile_dir, resource_type)
-            logger.debug(f"Found {len(resources)} {resource_type} resources")
-
-            for resource_path, resource_name in resources:
-                try:
-                    mount_point = self._create_mount_point(
-                        resource_path=resource_path,
-                        profile_id=request.profile_id,
-                        resource_type=resource_type,
-                        resource_name=resource_name,
-                        seen_ids=seen_ids,
-                    )
-                    mount_points.append(mount_point)
-                    logger.debug(f"Created mount point: {mount_point.module_id}")
-                except Exception as e:
-                    logger.error(f"Error creating mount point for {resource_type}/{resource_name}: {e}")
-                    # Continue processing other resources even if one fails
-
-        logger.info(f"Generated mount plan with {len(mount_points)} mount points for session {session_id}")
-
-        # Create and return mount plan (organizing happens in model_post_init)
-        return MountPlan(
-            session=session_config,
-            mount_points=mount_points,
-        )
-
-    def _create_mount_point(
-        self,
-        resource_path: Path,
-        profile_id: str,
-        resource_type: str,
-        resource_name: str,
-        seen_ids: set[str],
-    ) -> MountPoint:
-        """Convert resource file to mount point.
-
-        Determines whether to create an EmbeddedMount (for agents/context) or
-        ReferencedMount (for providers/tools/hooks) based on the resource type.
-        Handles module ID collision detection and resolution.
-
-        Args:
-            resource_path: Path to resource file
-            profile_id: Profile ID for module_id generation
-            resource_type: Type of resource (agents, context, providers, tools, hooks)
-            resource_name: Name of resource (filename without extension)
-            seen_ids: Set of module IDs seen so far (for collision detection)
-
-        Returns:
-            EmbeddedMount or ReferencedMount based on resource type
-
-        Note:
-            Implements deterministic collision handling by appending .2, .3, etc.
-            to module IDs that would otherwise conflict.
-        """
-        # Generate base module_id (format: {profile_id}.{resource_type}.{resource_name})
-        # Convert resource_type plural to singular for module_id (e.g., "agents" -> "agent")
-        module_type_singular = resource_type.rstrip("s")
-        module_id = f"{profile_id}.{module_type_singular}.{resource_name}"
-
-        # Handle collisions with deterministic counter
-        if module_id in seen_ids:
-            counter = 2
-            while f"{module_id}.{counter}" in seen_ids:
-                counter += 1
-            module_id = f"{module_id}.{counter}"
-            logger.warning(f"Module ID collision detected, using: {module_id} (counter={counter})")
-
-        seen_ids.add(module_id)
-
-        # Determine mount type and create appropriate mount point
-        if resource_type in ["agents", "context"]:
-            # EMBEDDED: Read content and create EmbeddedMount
-            content = resource_path.read_text(encoding="utf-8")
-            return EmbeddedMount(
-                module_id=module_id,
-                module_type=module_type_singular,  # type: ignore[arg-type]  # Will be "agent" or "context"
-                content=content,
-                metadata={},
+        if not registry_profile_path.exists():
+            raise FileNotFoundError(
+                f"Profile source not found: {registry_profile_path}. Expected profile definition at this location."
             )
-        # REFERENCED: Create file:// URL and ReferencedMount
-        abs_path = resource_path.resolve()
-        file_url = f"file://{abs_path}"
-        return ReferencedMount(
-            module_id=module_id,
-            module_type=module_type_singular,  # type: ignore[arg-type]  # Will be "provider", "tool", or "hook"
-            source_path=file_url,
-            metadata={},
-        )
 
-    def _find_resources(
-        self,
-        profile_dir: Path,
-        resource_type: str,
-    ) -> list[tuple[Path, str]]:
-        """Find all resources of a given type in profile directory.
+        # Parse YAML frontmatter from profile.md
+        frontmatter = self._parse_frontmatter(registry_profile_path)
 
-        Searches the appropriate subdirectory for the resource type and returns
-        a list of (path, name) tuples for each resource found.
+        # Transform to mount plan dict
+        mount_plan = self._transform_to_mount_plan(frontmatter, profile_id, agents_dict)
+
+        logger.info(f"Generated mount plan for {profile_id} with {len(agents_dict)} agents")
+        return mount_plan
+
+    def _parse_frontmatter(self, profile_path: Path) -> dict[str, Any]:
+        """Parse YAML frontmatter from profile.md.
 
         Args:
-            profile_dir: Path to profile cache directory
-            resource_type: Type of resource (agents, context, providers, tools, hooks)
+            profile_path: Path to profile.md file
 
         Returns:
-            List of (resource_path, resource_name) tuples
-            Empty list if subdirectory doesn't exist
+            Dict of parsed YAML frontmatter
+
+        Raises:
+            ValueError: If file has no frontmatter or invalid YAML
         """
-        resource_dir = profile_dir / resource_type
-        if not resource_dir.exists():
-            logger.debug(f"Resource directory not found: {resource_dir}")
-            return []
+        content = profile_path.read_text(encoding="utf-8")
 
-        resources: list[tuple[Path, str]] = []
+        # Extract frontmatter between --- delimiters
+        if not content.startswith("---\n"):
+            raise ValueError(f"Profile {profile_path} has no YAML frontmatter")
 
-        if resource_type in ["agents"]:
-            # Agents: glob "*.md" files (flat structure)
-            for resource_path in resource_dir.glob("*.md"):
-                resource_name = resource_path.stem  # filename without extension
-                resources.append((resource_path, resource_name))
+        # Find end of frontmatter
+        end_idx = content.find("\n---\n", 4)
+        if end_idx == -1:
+            raise ValueError(f"Profile {profile_path} has unclosed frontmatter")
 
-        elif resource_type in ["context"]:
-            # Context: recursively glob "**/*.md" files (nested directories)
-            for resource_path in resource_dir.rglob("**/*.md"):
-                # Use relative path from resource_dir as name (preserves nested structure)
-                relative_path = resource_path.relative_to(resource_dir)
-                resource_name = str(relative_path.with_suffix("")).replace("/", ".")
-                resources.append((resource_path, resource_name))
+        frontmatter_text = content[4:end_idx]
 
-        elif resource_type in ["providers", "tools", "hooks"]:
-            # Code modules: recursively glob "**/*.py" files
-            for resource_path in resource_dir.rglob("**/*.py"):
-                # Use relative path from resource_dir as name (preserves nested structure)
-                relative_path = resource_path.relative_to(resource_dir)
-                resource_name = str(relative_path.with_suffix("")).replace("/", ".")
-                resources.append((resource_path, resource_name))
+        # Parse YAML
+        try:
+            frontmatter = yaml.safe_load(frontmatter_text)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in {profile_path}: {e}") from e
 
-        logger.debug(f"Found {len(resources)} resources in {resource_dir}")
-        return resources
+        return frontmatter
+
+    def _load_agents(self, agents_dir: Path, profile_id: str) -> dict[str, dict[str, Any]]:
+        """Load agent markdown files from profile agents directory.
+
+        Args:
+            agents_dir: Path to agents directory
+            profile_id: Profile ID for metadata
+
+        Returns:
+            Dict mapping agent names to content/metadata
+        """
+        if not agents_dir.exists():
+            logger.debug(f"No agents directory at {agents_dir}")
+            return {}
+
+        agents = {}
+        for agent_file in agents_dir.glob("*.md"):
+            agent_name = agent_file.stem
+            content = agent_file.read_text(encoding="utf-8")
+            agents[agent_name] = {"content": content, "metadata": {"source": f"{profile_id}:agents/{agent_file.name}"}}
+            logger.debug(f"Loaded agent: {agent_name}")
+
+        return agents
+
+    def _transform_to_mount_plan(
+        self, frontmatter: dict[str, Any], profile_id: str, agents_dict: dict[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Transform frontmatter YAML to mount plan dict.
+
+        Args:
+            frontmatter: Parsed YAML frontmatter
+            profile_id: Profile ID for source hints
+            agents_dict: Loaded agents
+
+        Returns:
+            Mount plan dict with session, providers, tools, hooks, agents
+        """
+        mount_plan: dict[str, Any] = {}
+
+        # Session section (orchestrator + context + session-level config)
+        if "session" in frontmatter:
+            session_data = frontmatter["session"]
+            mount_plan["session"] = {}
+
+            # Transform orchestrator
+            if "orchestrator" in session_data:
+                orch = session_data["orchestrator"]
+                mount_plan["session"]["orchestrator"] = {
+                    "module": orch.get("module"),
+                    "source": profile_id,  # Profile hint for resolver
+                    "config": orch.get("config", {}),
+                }
+
+            # Transform context
+            if "context" in session_data:
+                ctx = session_data["context"]
+                mount_plan["session"]["context"] = {
+                    "module": ctx.get("module"),
+                    "source": profile_id,  # Profile hint for resolver
+                    "config": ctx.get("config", {}),
+                }
+
+            # Copy session-level configuration fields (injection limits, etc.)
+            if "injection_size_limit" in session_data:
+                mount_plan["session"]["injection_size_limit"] = session_data["injection_size_limit"]
+            if "injection_budget_per_turn" in session_data:
+                mount_plan["session"]["injection_budget_per_turn"] = session_data["injection_budget_per_turn"]
+
+        # Transform providers
+        if "providers" in frontmatter:
+            mount_plan["providers"] = [
+                {
+                    "module": p.get("module"),
+                    "source": profile_id,  # Profile hint for resolver
+                    "config": p.get("config", {}),
+                }
+                for p in frontmatter["providers"]
+            ]
+
+        # Transform tools
+        if "tools" in frontmatter:
+            mount_plan["tools"] = [
+                {
+                    "module": t.get("module"),
+                    "source": profile_id,  # Profile hint for resolver
+                    "config": t.get("config", {}),
+                }
+                for t in frontmatter["tools"]
+            ]
+
+        # Transform hooks
+        if "hooks" in frontmatter:
+            mount_plan["hooks"] = [
+                {
+                    "module": h.get("module"),
+                    "source": profile_id,  # Profile hint for resolver
+                    "config": h.get("config", {}),
+                }
+                for h in frontmatter["hooks"]
+            ]
+
+        # Add agents
+        if agents_dict:
+            mount_plan["agents"] = agents_dict
+
+        return mount_plan

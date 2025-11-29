@@ -316,7 +316,7 @@ class TestModulesAPI:
             json={"source": "file:///custom/openai.py", "scope": "project"},
         )
 
-        # SimpleModuleService doesn't support source management
+        # ModuleService doesn't support source management
         assert response.status_code in [201, 404, 500, 501]
 
     def test_add_module_source_failure(self, client: TestClient) -> None:
@@ -335,14 +335,14 @@ class TestModulesAPI:
             json={"source": "file:///updated/openai.py", "scope": "project"},
         )
 
-        # SimpleModuleService doesn't support source management
+        # ModuleService doesn't support source management
         assert response.status_code in [200, 404, 500, 501]
 
     def test_remove_module_source_success(self, client: TestClient) -> None:
         """Test DELETE /api/v1/modules/{module_id}/sources removes override."""
         response = client.delete("/api/v1/modules/openai-provider/sources?scope=project")
 
-        # SimpleModuleService doesn't support source management
+        # ModuleService doesn't support source management
         assert response.status_code in [200, 404, 500, 501]
 
     def test_remove_module_source_not_found(self, client: TestClient) -> None:

@@ -20,7 +20,6 @@ from amplifier_library.storage import get_state_dir
 from amplifier_library.storage.paths import get_root_working_dir
 
 from ..models.mount_plans import MountPlan
-from ..models.mount_plans import MountPlanRequest
 from ..models.sessions import SessionMessage
 from ..models.sessions import SessionMetadata
 from ..models.sessions import SessionStatus
@@ -113,15 +112,16 @@ async def create_session(
                 )
 
         # Generate mount plan
-        request = MountPlanRequest(
-            profile_id=profile_name,
-            settings_overrides=settings_overrides or {},
-        )
-        mount_plan = await mount_plan_service.generate_mount_plan(request)
+        mount_plan = mount_plan_service.generate_mount_plan(profile_name)
+
+        # Generate session ID
+        import uuid
+
+        session_id = f"session_{uuid.uuid4().hex[:8]}"
 
         # Create session with mount plan
         metadata = session_service.create_session(
-            session_id=mount_plan.session.session_id,
+            session_id=session_id,
             profile_name=profile_name,
             mount_plan=mount_plan,
             parent_session_id=parent_session_id,

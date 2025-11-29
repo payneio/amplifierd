@@ -2,47 +2,45 @@
 
 from datetime import UTC
 from datetime import datetime
-from unittest.mock import AsyncMock
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from amplifierd.main import app
-from amplifierd.models.mount_plans import EmbeddedMount
-from amplifierd.models.mount_plans import MountPlan
-from amplifierd.models.mount_plans import SessionConfig
 from amplifierd.routers.mount_plans import get_mount_plan_service
 
 
 @pytest.fixture
-def mock_mount_plan() -> MountPlan:
+def mock_mount_plan() -> dict:
     """Sample mount plan for testing.
 
     Returns:
-        Sample mount plan with realistic data
+        Sample mount plan dict with realistic data
     """
-    return MountPlan(
-        format_version="1.0",
-        session=SessionConfig(
-            session_id="test_session_123",
-            profile_id="foundation/base",
-            created_at=datetime.now(UTC).isoformat(),
-            settings={},
-        ),
-        mount_points=[
-            EmbeddedMount(
-                module_id="foundation/base.agents.zen-architect",
-                module_type="agent",
-                content="# Zen Architect\n\nYou are a zen architect.",
-            ),
-            EmbeddedMount(
-                module_id="foundation/base.context.philosophy",
-                module_type="context",
-                content="# Philosophy\n\nBe simple and elegant.",
-            ),
+    return {
+        "format_version": "1.0",
+        "session": {
+            "session_id": "test_session_123",
+            "profile_id": "foundation/base",
+            "created_at": datetime.now(UTC).isoformat(),
+            "settings": {},
+        },
+        "mount_points": [
+            {
+                "mount_type": "embedded",
+                "module_id": "foundation/base.agents.zen-architect",
+                "module_type": "agent",
+                "content": "# Zen Architect\n\nYou are a zen architect.",
+            },
+            {
+                "mount_type": "embedded",
+                "module_id": "foundation/base.context.philosophy",
+                "module_type": "context",
+                "content": "# Philosophy\n\nBe simple and elegant.",
+            },
         ],
-    )
+    }
 
 
 @pytest.fixture
@@ -53,7 +51,7 @@ def mock_mount_plan_service() -> Mock:
         Mock service for testing
     """
     service = Mock()
-    service.generate_mount_plan = AsyncMock()
+    service.generate_mount_plan = Mock()
     return service
 
 
@@ -90,7 +88,7 @@ class TestMountPlansAPI:
     """Test mount plan API endpoints."""
 
     def test_generate_mount_plan_success(
-        self, client: TestClient, mock_mount_plan: MountPlan, mock_mount_plan_service: Mock
+        self, client: TestClient, mock_mount_plan: dict, mock_mount_plan_service: Mock
     ) -> None:
         """Test POST /api/v1/mount-plans/generate returns 201 with valid response."""
         # Setup mock
@@ -145,9 +143,9 @@ class TestMountPlansAPI:
         assert "invalid" in response.json()["detail"].lower()
 
     def test_generate_mount_plan_with_settings_overrides(
-        self, client: TestClient, mock_mount_plan: MountPlan, mock_mount_plan_service: Mock
+        self, client: TestClient, mock_mount_plan: dict, mock_mount_plan_service: Mock
     ) -> None:
-        """Test POST /api/v1/mount-plans/generate applies settings overrides."""
+        """Test POST /api/v1/mount-plans/generate accepts settings overrides."""
         # Setup mock
         mock_mount_plan_service.generate_mount_plan.return_value = mock_mount_plan
 
@@ -163,26 +161,24 @@ class TestMountPlansAPI:
         # Assert response
         assert response.status_code == 201
 
-        # Verify service was called with overrides
-        call_args = mock_mount_plan_service.generate_mount_plan.call_args
-        request = call_args[0][0]
-        assert request.settings_overrides == {"llm": {"model": "gpt-4", "temperature": 0.7}}
+        # Verify service was called with profile_id
+        mock_mount_plan_service.generate_mount_plan.assert_called_once_with("foundation/base")
 
     def test_generate_mount_plan_with_custom_session_id(
         self, client: TestClient, mock_mount_plan_service: Mock
     ) -> None:
-        """Test POST /api/v1/mount-plans/generate preserves custom session ID."""
+        """Test POST /api/v1/mount-plans/generate accepts custom session ID."""
         # Create mount plan with custom session ID
-        custom_mount_plan = MountPlan(
-            format_version="1.0",
-            session=SessionConfig(
-                session_id="my-custom-session-123",
-                profile_id="foundation/base",
-                created_at=datetime.now(UTC).isoformat(),
-                settings={},
-            ),
-            mount_points=[],
-        )
+        custom_mount_plan = {
+            "format_version": "1.0",
+            "session": {
+                "session_id": "my-custom-session-123",
+                "profile_id": "foundation/base",
+                "created_at": datetime.now(UTC).isoformat(),
+                "settings": {},
+            },
+            "mount_points": [],
+        }
 
         # Setup mock
         mock_mount_plan_service.generate_mount_plan.return_value = custom_mount_plan
@@ -198,10 +194,8 @@ class TestMountPlansAPI:
         data = response.json()
         assert data["session"]["sessionId"] == "my-custom-session-123"
 
-        # Verify service was called with custom session ID
-        call_args = mock_mount_plan_service.generate_mount_plan.call_args
-        request = call_args[0][0]
-        assert request.session_id == "my-custom-session-123"
+        # Verify service was called with profile_id
+        mock_mount_plan_service.generate_mount_plan.assert_called_once_with("foundation/base")
 
     def test_generate_mount_plan_internal_error(self, client: TestClient, mock_mount_plan_service: Mock) -> None:
         """Test POST /api/v1/mount-plans/generate returns 500 for unexpected errors."""
@@ -229,16 +223,16 @@ class TestMountPlansAPI:
     def test_generate_mount_plan_empty_mount_points(self, client: TestClient, mock_mount_plan_service: Mock) -> None:
         """Test POST /api/v1/mount-plans/generate handles empty mount points."""
         # Create mount plan with no mount points
-        empty_mount_plan = MountPlan(
-            format_version="1.0",
-            session=SessionConfig(
-                session_id="test_session_456",
-                profile_id="foundation/minimal",
-                created_at=datetime.now(UTC).isoformat(),
-                settings={},
-            ),
-            mount_points=[],
-        )
+        empty_mount_plan = {
+            "format_version": "1.0",
+            "session": {
+                "session_id": "test_session_456",
+                "profile_id": "foundation/minimal",
+                "created_at": datetime.now(UTC).isoformat(),
+                "settings": {},
+            },
+            "mount_points": [],
+        }
 
         # Setup mock
         mock_mount_plan_service.generate_mount_plan.return_value = empty_mount_plan
@@ -255,37 +249,41 @@ class TestMountPlansAPI:
     def test_generate_mount_plan_multiple_module_types(self, client: TestClient, mock_mount_plan_service: Mock) -> None:
         """Test POST /api/v1/mount-plans/generate handles multiple agents and contexts."""
         # Create mount plan with multiple agents and contexts
-        diverse_mount_plan = MountPlan(
-            format_version="1.0",
-            session=SessionConfig(
-                session_id="test_session_789",
-                profile_id="foundation/full",
-                created_at=datetime.now(UTC).isoformat(),
-                settings={},
-            ),
-            mount_points=[
-                EmbeddedMount(
-                    module_id="foundation/full.agents.test-agent",
-                    module_type="agent",
-                    content="# Test Agent",
-                ),
-                EmbeddedMount(
-                    module_id="foundation/full.agents.another-agent",
-                    module_type="agent",
-                    content="# Another Agent",
-                ),
-                EmbeddedMount(
-                    module_id="foundation/full.context.test-context",
-                    module_type="context",
-                    content="# Test Context",
-                ),
-                EmbeddedMount(
-                    module_id="foundation/full.context.another-context",
-                    module_type="context",
-                    content="# Another Context",
-                ),
+        diverse_mount_plan = {
+            "format_version": "1.0",
+            "session": {
+                "session_id": "test_session_789",
+                "profile_id": "foundation/full",
+                "created_at": datetime.now(UTC).isoformat(),
+                "settings": {},
+            },
+            "mount_points": [
+                {
+                    "mount_type": "embedded",
+                    "module_id": "foundation/full.agents.test-agent",
+                    "module_type": "agent",
+                    "content": "# Test Agent",
+                },
+                {
+                    "mount_type": "embedded",
+                    "module_id": "foundation/full.agents.another-agent",
+                    "module_type": "agent",
+                    "content": "# Another Agent",
+                },
+                {
+                    "mount_type": "embedded",
+                    "module_id": "foundation/full.context.test-context",
+                    "module_type": "context",
+                    "content": "# Test Context",
+                },
+                {
+                    "mount_type": "embedded",
+                    "module_id": "foundation/full.context.another-context",
+                    "module_type": "context",
+                    "content": "# Another Context",
+                },
             ],
-        )
+        }
 
         # Setup mock
         mock_mount_plan_service.generate_mount_plan.return_value = diverse_mount_plan

@@ -81,7 +81,7 @@ class ProfileCompilationService:
             "name": profile.name,
             "version": profile.version,
             "agents": sorted(profile.agents or []),
-            "context": sorted(profile.context or []),
+            "context": sorted((profile.context or {}).items()),  # Dict items for hashing
             "tools": [{"module": t.module, "source": t.source} for t in profile.tools],
             "hooks": [{"module": h.module, "source": h.source} for h in profile.hooks],
             "providers": [{"module": p.module, "source": p.source} for p in profile.providers],
@@ -171,8 +171,9 @@ class ProfileCompilationService:
             # Initialize assets dictionary for all module types
             assets: dict[str, list[Path]] = {
                 "orchestrator": [],
+                "context-manager": [],  # Python module for context management
                 "agents": [],
-                "context": [],
+                "context": [],  # Embedded markdown context files
                 "tools": [],
                 "hooks": [],
                 "providers": [],
@@ -187,7 +188,7 @@ class ProfileCompilationService:
             # Resolve context-manager module source (if present)
             if profile.session and profile.session.context_manager and profile.session.context_manager.source:
                 resolved_path = self._resolve_ref(profile.session.context_manager.source, "context-manager")
-                assets["orchestrator"].append(resolved_path)
+                assets["context-manager"].append(resolved_path)
                 logger.debug(f"Resolved context-manager: {profile.session.context_manager.module}")
 
             # Resolve agent refs (schema v2: list of file refs)
@@ -202,10 +203,10 @@ class ProfileCompilationService:
                         logger.error(f"Failed to resolve agent ref '{agent_ref}': {e}")
                         raise
 
-            # Resolve context refs (schema v2: list of directory refs)
+            # Resolve context refs (schema v2: dict of name -> directory refs)
             if profile.context:
                 logger.debug(f"Resolving {len(profile.context)} context directory refs")
-                for context_ref in profile.context:
+                for _context_name, context_ref in profile.context.items():
                     try:
                         resolved_path = self._resolve_ref(context_ref, "context")
 
@@ -240,7 +241,7 @@ class ProfileCompilationService:
                     assets["providers"].append(resolved_path)
 
             # Create Python module structure in STAGING directory
-            self._create_module_structure(staging_dir, assets)
+            self._create_module_structure(staging_dir, assets, profile)
 
             # Copy the cached manifest file from discovery cache into staging
             # The manifest is preserved by the discovery service and must exist in the final compiled profile
@@ -299,88 +300,185 @@ class ProfileCompilationService:
         except RefResolutionError as e:
             raise RefResolutionError(f"Failed to resolve {ref_type} reference '{ref}': {e}") from e
 
-    def _create_module_structure(self, target_dir: Path, assets: dict[str, list[Path]]) -> None:
-        """Create Python module structure for compiled profile.
+    def _create_module_structure(
+        self, target_dir: Path, assets: dict[str, list[Path]], profile_spec: ProfileDetails
+    ) -> None:
+        """Create Python module structure using profile names from profile spec.
 
-        Creates a standard Python package layout with subdirectories for each
-        asset type, __init__.py files, and copies all resolved assets into place.
+        For each module type:
+        1. Get module name from profile spec
+        2. Create directory: {mount_type}/{module_name}/
+        3. Copy module package into that directory
 
         Args:
-            target_dir: Compilation target directory
-            assets: Dict mapping asset type to list of asset paths
+            target_dir: Staging directory for compilation
+            assets: Dict of resolved asset paths from cache
+            profile_spec: Profile details with module names
 
         Side Effects:
-            - Creates target_dir/__init__.py
-            - Creates subdirectories with __init__.py for each asset type
-            - Copies files and directories from resolved asset paths
+            - Creates directory structure using profile names
+            - Copies module packages from cache
+            - Creates __init__.py files
 
         Structure Created:
             target_dir/
               __init__.py
               orchestrator/
-                __init__.py
-                (orchestrator files)
-              agents/
-                __init__.py
-                agent1.md
+                loop-streaming/              ← Profile name
+                  amplifier_module_loop_streaming/
               context/
-                __init__.py
-                doc1.md
-              tools/
-                __init__.py
-              hooks/
-                __init__.py
+                context-simple/              ← Profile name
+                  amplifier_module_context_simple/
               providers/
-                __init__.py
+                provider-anthropic/          ← Profile name
+                  amplifier_module_provider_anthropic/
         """
         # Create root __init__.py
         root_init = target_dir / "__init__.py"
         root_init.write_text('"""Compiled profile module."""\n')
         logger.debug(f"Created {root_init}")
 
-        # Create subdirectory for each asset type
-        for asset_type, asset_paths in assets.items():
-            if not asset_paths:
-                # Still create empty directories for consistency
-                type_dir = target_dir / asset_type
-                type_dir.mkdir(exist_ok=True)
+        # Process session.orchestrator
+        orchestrator_dir = target_dir / "orchestrator"
+        orchestrator_dir.mkdir(exist_ok=True)
+        (orchestrator_dir / "__init__.py").write_text('"""Orchestrator assets."""\n')
 
-                # Create __init__.py
-                init_file = type_dir / "__init__.py"
-                init_file.write_text(f'"""{asset_type.capitalize()} assets."""\n')
-                logger.debug(f"Created empty {asset_type}/ directory")
-                continue
+        if assets.get("orchestrator") and profile_spec.session:
+            module_name = profile_spec.session.orchestrator.module
+            source_path = assets["orchestrator"][0]
 
-            # Create asset type directory
-            type_dir = target_dir / asset_type
-            type_dir.mkdir(exist_ok=True)
+            dest_dir = orchestrator_dir / module_name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy module package
+            self._copy_module_package(source_path, dest_dir)
+            logger.debug(f"Created orchestrator/{module_name}/ with module package")
+
+        # Process session.context-manager (note: context directory might also be used for context files)
+        if assets.get("context-manager") and profile_spec.session and profile_spec.session.context_manager:
+            module_name = profile_spec.session.context_manager.module
+            source_path = assets["context-manager"][0]
+
+            context_dir = target_dir / "context"
+            context_dir.mkdir(exist_ok=True)
+            # Create __init__.py if not already created
+            init_file = context_dir / "__init__.py"
+            if not init_file.exists():
+                init_file.write_text('"""Context assets."""\n')
+
+            dest_dir = context_dir / module_name
+            dest_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy module package
+            self._copy_module_package(source_path, dest_dir)
+            logger.debug(f"Created context/{module_name}/ with module package")
+
+        # Process agents (list of file refs)
+        if assets.get("agents"):
+            agents_dir = target_dir / "agents"
+            agents_dir.mkdir(exist_ok=True)
 
             # Create __init__.py
-            init_file = type_dir / "__init__.py"
-            init_file.write_text(f'"""{asset_type.capitalize()} assets."""\n')
+            (agents_dir / "__init__.py").write_text('"""Agent assets."""\n')
 
-            # Copy assets
-            for asset_path in asset_paths:
-                if asset_path.is_file():
-                    # Copy single file
-                    dest = type_dir / asset_path.name
-                    shutil.copy2(asset_path, dest)
-                    logger.debug(f"Copied file {asset_path.name} to {type_dir}/")
+            # Copy agent files
+            for agent_path in assets["agents"]:
+                if agent_path.is_file():
+                    dest = agents_dir / agent_path.name
+                    shutil.copy2(agent_path, dest)
+                    logger.debug(f"Copied agent {agent_path.name} to agents/")
 
-                elif asset_path.is_dir():
-                    # Copy entire directory, excluding non-essential directories
-                    dest = type_dir / asset_path.name
+        # Process contexts (dict of name -> directory refs)
+        if assets.get("context") and profile_spec.context:
+            contexts_dir = target_dir / "contexts"  # Plural!
+            contexts_dir.mkdir(exist_ok=True)
+            (contexts_dir / "__init__.py").write_text('"""Context documentation assets."""\n')
+
+            # Copy context directories using names from profile spec
+            context_names = list(profile_spec.context.keys())
+            for context_name, context_path in zip(context_names, assets["context"], strict=False):
+                if context_path.is_dir():
+                    dest = contexts_dir / context_name  # Use profile's context name!
 
                     def ignore_non_essential(dir: str, files: list[str]) -> set[str]:
                         """Ignore .git, __pycache__, .venv, and other non-essential directories."""
                         return {name for name in files if name in {".git", "__pycache__", ".venv", "node_modules"}}
 
-                    shutil.copytree(asset_path, dest, dirs_exist_ok=True, ignore=ignore_non_essential)
-                    logger.debug(f"Copied directory {asset_path.name}/ to {type_dir}/ (excluding .git and cache dirs)")
+                    shutil.copytree(context_path, dest, dirs_exist_ok=True, ignore=ignore_non_essential)
+                    logger.debug(f"Copied context directory to contexts/{context_name}/")
 
-                else:
-                    logger.warning(f"Asset path is neither file nor directory: {asset_path}")
+        # Process providers, tools, hooks (lists)
+        for module_type in ["providers", "tools", "hooks"]:
+            if not assets.get(module_type):
+                # Create empty directories for consistency
+                type_dir = target_dir / module_type
+                type_dir.mkdir(exist_ok=True)
+                (type_dir / "__init__.py").write_text(f'"""{module_type.capitalize()} assets."""\n')
+                logger.debug(f"Created empty {module_type}/ directory")
+                continue
 
-            logger.debug(f"Created {asset_type}/ with {len(asset_paths)} assets")
+            type_dir = target_dir / module_type
+            type_dir.mkdir(exist_ok=True)
+
+            # Create __init__.py
+            (type_dir / "__init__.py").write_text(f'"""{module_type.capitalize()} assets."""\n')
+
+            # Get module list from profile spec
+            module_list = getattr(profile_spec, module_type, [])
+
+            # Match assets to modules by index (assets are in same order as profile spec)
+            for module_config, source_path in zip(module_list, assets[module_type], strict=False):
+                module_name = module_config.module
+
+                dest_dir = type_dir / module_name
+                dest_dir.mkdir(parents=True, exist_ok=True)
+
+                # Copy module package
+                self._copy_module_package(source_path, dest_dir)
+                logger.debug(f"Created {module_type}/{module_name}/ with module package")
 
         logger.info(f"Created Python module structure at {target_dir}")
+
+    def _copy_module_package(self, source_path: Path, dest_dir: Path) -> None:
+        """Copy module package from cache to destination.
+
+        Handles both:
+        - Directories: Copy entire tree (e.g., amplifier_module_*/ directory)
+        - Files: Copy single file (e.g., agent.md)
+
+        Args:
+            source_path: Path in cache (may be hash directory or package directly)
+            dest_dir: Destination directory
+        """
+        if source_path.is_dir():
+            # Find the amplifier_module_* package inside (if in hash directory)
+            package_dirs = list(source_path.glob("amplifier_module_*"))
+
+            if package_dirs:
+                # Copy the package directory
+                package_dir = package_dirs[0]
+                dest_package = dest_dir / package_dir.name
+                shutil.copytree(
+                    package_dir,
+                    dest_package,
+                    dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns(".git", "__pycache__", ".venv", "node_modules"),
+                )
+                logger.debug(f"Copied module package {package_dir.name}/ to {dest_dir}/")
+            else:
+                # Might be the package itself
+                if source_path.name.startswith("amplifier_module_"):
+                    dest_package = dest_dir / source_path.name
+                    shutil.copytree(
+                        source_path,
+                        dest_package,
+                        dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(".git", "__pycache__", ".venv", "node_modules"),
+                    )
+                    logger.debug(f"Copied module package {source_path.name}/ to {dest_dir}/")
+                else:
+                    logger.warning(f"No amplifier_module_* package found in {source_path}")
+        elif source_path.is_file():
+            # Single file (agents, context markdown)
+            shutil.copy2(source_path, dest_dir / source_path.name)
+            logger.debug(f"Copied file {source_path.name} to {dest_dir}/")

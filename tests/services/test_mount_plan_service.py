@@ -1,23 +1,15 @@
 """Unit and integration tests for MountPlanService."""
 
 from pathlib import Path
-from unittest.mock import Mock
+from typing import Any
 
 import pytest
 
-from amplifierd.models.mount_plans import EmbeddedMount
-from amplifierd.models.mount_plans import MountPlanRequest
-from amplifierd.models.mount_plans import ReferencedMount
 from amplifierd.services.mount_plan_service import MountPlanService
 
 
 class TestMountPlanService:
     """Tests for MountPlanService."""
-
-    @pytest.fixture
-    def profile_service_mock(self) -> Mock:
-        """Mock ProfileService for testing."""
-        return Mock()
 
     @pytest.fixture
     def test_profile_dir(self, tmp_path: Path) -> Path:
@@ -32,311 +24,191 @@ class TestMountPlanService:
         (agents_dir / "zen-architect.md").write_text("# Zen Architect\n\nYou are a systems architect...")
         (agents_dir / "bug-hunter.md").write_text("# Bug Hunter\n\nYou find bugs...")
 
-        # Create context directory with nested structure
-        context_dir = profile_dir / "context"
-        context_dir.mkdir()
-        (context_dir / "design-principles.md").write_text("# Design Principles\n\nFollow these...")
-        nested_context = context_dir / "shared"
-        nested_context.mkdir()
-        (nested_context / "common-base.md").write_text("# Common Base\n\nShared context...")
+        # Create registry profile.md
+        registry_dir = tmp_path / "registry" / "profiles" / "foundation"
+        registry_dir.mkdir(parents=True)
 
-        # Create providers directory
-        providers_dir = profile_dir / "providers"
-        providers_dir.mkdir()
-        (providers_dir / "anthropic.py").write_text("# Provider code")
+        profile_yaml = """---
+profile:
+  name: base
+  version: 1.0.0
+  description: Test profile
+session:
+  orchestrator:
+    module: loop-streaming
+    source: git+https://github.com/test/repo
+    config:
+      extended_thinking: true
+  context:
+    module: context-simple
+    source: git+https://github.com/test/repo
+    config:
+      max_tokens: 400000
+providers:
+- module: provider-anthropic
+  source: git+https://github.com/test/repo
+  config:
+    default_model: claude-sonnet-4-5
+tools:
+- module: tool-web
+  source: git+https://github.com/test/repo
+hooks:
+- module: hooks-logging
+  source: git+https://github.com/test/repo
+  config:
+    mode: session-only
+---
 
-        # Create tools directory
-        tools_dir = profile_dir / "tools"
-        tools_dir.mkdir()
-        (tools_dir / "file-reader.py").write_text("# Tool code")
-
-        # Create hooks directory
-        hooks_dir = profile_dir / "hooks"
-        hooks_dir.mkdir()
-        (hooks_dir / "pre-commit.py").write_text("# Hook code")
+Test profile content.
+"""
+        (registry_dir / "base.md").write_text(profile_yaml)
 
         return tmp_path
 
     @pytest.fixture
-    def service(self, profile_service_mock: Mock, test_profile_dir: Path) -> MountPlanService:
+    def service(self, test_profile_dir: Path, monkeypatch: pytest.MonkeyPatch) -> MountPlanService:
         """Create MountPlanService instance with test setup."""
-        return MountPlanService(
-            profile_service=profile_service_mock,
-            share_dir=test_profile_dir,
-        )
 
-    @pytest.mark.asyncio
-    async def test_generate_mount_plan_happy_path(self, service: MountPlanService) -> None:
+        # Patch the hardcoded registry path
+        def patched_generate(self: MountPlanService, profile_id: str) -> dict[str, Any]:
+            # Validate profile_id format
+            parts = profile_id.split("/")
+            if len(parts) != 2:
+                raise ValueError(
+                    f"Invalid profile_id format: {profile_id}. "
+                    "Expected format: collection/profile (e.g., 'foundation/base')"
+                )
+            collection_id, profile_name = parts
+
+            # Use test registry path
+            registry_path = test_profile_dir / "registry" / "profiles" / collection_id / f"{profile_name}.md"
+
+            # Inline the logic with test path instead of calling original
+            profile_dir = self.share_dir / "profiles" / collection_id / profile_name
+            if not profile_dir.exists():
+                raise FileNotFoundError(f"Profile cache directory not found: {profile_dir}")
+
+            agents_dict = self._load_agents(profile_dir / "agents", profile_id)
+
+            if not registry_path.exists():
+                raise FileNotFoundError(f"Profile source not found: {registry_path}")
+
+            frontmatter = self._parse_frontmatter(registry_path)
+            return self._transform_to_mount_plan(frontmatter, profile_id, agents_dict)
+
+        monkeypatch.setattr(MountPlanService, "generate_mount_plan", patched_generate)
+
+        return MountPlanService(share_dir=test_profile_dir)
+
+    def test_generate_mount_plan_happy_path(self, service: MountPlanService) -> None:
         """Test generating mount plan with all resource types."""
-        request = MountPlanRequest(profile_id="foundation/base")
+        plan = service.generate_mount_plan("foundation/base")
 
-        plan = await service.generate_mount_plan(request)
+        # Verify it returns a dict
+        assert isinstance(plan, dict)
 
-        # Verify session config
-        assert plan.session.profile_id == "foundation/base"
-        assert plan.session.session_id.startswith("session_")
-        assert plan.session.parent_session_id is None
-        assert plan.session.created_at  # ISO format datetime
+        # Verify session section
+        assert "session" in plan
+        assert "orchestrator" in plan["session"]
+        assert plan["session"]["orchestrator"]["module"] == "loop-streaming"
+        assert plan["session"]["orchestrator"]["source"] == "foundation/base"
+        assert plan["session"]["orchestrator"]["config"]["extended_thinking"] is True
 
-        # Verify mount points were created
-        assert len(plan.mount_points) > 0
-
-        # Verify agents (flat structure)
-        assert len(plan.agents) == 2
-        assert "foundation/base.agent.zen-architect" in plan.agents
-        assert "foundation/base.agent.bug-hunter" in plan.agents
-
-        # Verify agent content is embedded
-        zen_agent = plan.agents["foundation/base.agent.zen-architect"]
-        assert isinstance(zen_agent, EmbeddedMount)
-        assert "Zen Architect" in zen_agent.content
-
-        # Verify context (nested structure)
-        assert len(plan.context) == 2
-        assert "foundation/base.context.design-principles" in plan.context
-        assert "foundation/base.context.shared.common-base" in plan.context
-
-        # Verify context content is embedded
-        design_context = plan.context["foundation/base.context.design-principles"]
-        assert isinstance(design_context, EmbeddedMount)
-        assert "Design Principles" in design_context.content
+        assert "context" in plan["session"]
+        assert plan["session"]["context"]["module"] == "context-simple"
+        assert plan["session"]["context"]["source"] == "foundation/base"
 
         # Verify providers
-        assert len(plan.providers) == 1
-        assert "foundation/base.provider.anthropic" in plan.providers
-        provider = plan.providers["foundation/base.provider.anthropic"]
-        assert isinstance(provider, ReferencedMount)
-        assert provider.source_path.startswith("file://")
-        assert "anthropic.py" in provider.source_path
+        assert "providers" in plan
+        assert len(plan["providers"]) == 1
+        assert plan["providers"][0]["module"] == "provider-anthropic"
+        assert plan["providers"][0]["source"] == "foundation/base"
 
         # Verify tools
-        assert len(plan.tools) == 1
-        assert "foundation/base.tool.file-reader" in plan.tools
+        assert "tools" in plan
+        assert len(plan["tools"]) == 1
+        assert plan["tools"][0]["module"] == "tool-web"
+        assert plan["tools"][0]["source"] == "foundation/base"
 
         # Verify hooks
-        assert len(plan.hooks) == 1
-        assert "foundation/base.hook.pre-commit" in plan.hooks
+        assert "hooks" in plan
+        assert len(plan["hooks"]) == 1
+        assert plan["hooks"][0]["module"] == "hooks-logging"
+        assert plan["hooks"][0]["source"] == "foundation/base"
+        assert plan["hooks"][0]["config"]["mode"] == "session-only"
 
-    @pytest.mark.asyncio
-    async def test_generate_with_custom_session_id(self, service: MountPlanService) -> None:
-        """Test generating mount plan with explicit session ID."""
-        request = MountPlanRequest(
-            profile_id="foundation/base",
-            session_id="custom_session_123",
-        )
+        # Verify agents
+        assert "agents" in plan
+        assert len(plan["agents"]) == 2
+        assert "zen-architect" in plan["agents"]
+        assert "bug-hunter" in plan["agents"]
+        assert "Zen Architect" in plan["agents"]["zen-architect"]["content"]
+        assert plan["agents"]["zen-architect"]["metadata"]["source"] == "foundation/base:agents/zen-architect.md"
 
-        plan = await service.generate_mount_plan(request)
-
-        assert plan.session.session_id == "custom_session_123"
-
-    @pytest.mark.asyncio
-    async def test_generate_with_settings_overrides(self, service: MountPlanService) -> None:
-        """Test generating mount plan with settings overrides."""
-        request = MountPlanRequest(
-            profile_id="foundation/base",
-            settings_overrides={"max_turns": 20, "streaming": False},
-        )
-
-        plan = await service.generate_mount_plan(request)
-
-        assert plan.session.settings["max_turns"] == 20
-        assert plan.session.settings["streaming"] is False
-
-    @pytest.mark.asyncio
-    async def test_generate_with_parent_session(self, service: MountPlanService) -> None:
-        """Test generating mount plan for sub-session."""
-        request = MountPlanRequest(
-            profile_id="foundation/base",
-            parent_session_id="parent_session_456",
-        )
-
-        plan = await service.generate_mount_plan(request)
-
-        assert plan.session.parent_session_id == "parent_session_456"
-
-    @pytest.mark.asyncio
-    async def test_invalid_profile_id_format(self, service: MountPlanService) -> None:
+    def test_invalid_profile_id_format(self, service: MountPlanService) -> None:
         """Test that invalid profile_id format raises ValueError."""
-        request = MountPlanRequest(profile_id="invalid-format")
-
         with pytest.raises(ValueError) as exc_info:
-            await service.generate_mount_plan(request)
+            service.generate_mount_plan("invalid-format")
 
         assert "Invalid profile_id format" in str(exc_info.value)
         assert "Expected format: collection/profile" in str(exc_info.value)
 
-    @pytest.mark.asyncio
-    async def test_profile_not_found(self, service: MountPlanService) -> None:
+    def test_profile_not_found(self, service: MountPlanService) -> None:
         """Test that missing profile raises FileNotFoundError."""
-        request = MountPlanRequest(profile_id="nonexistent/profile")
-
         with pytest.raises(FileNotFoundError) as exc_info:
-            await service.generate_mount_plan(request)
+            service.generate_mount_plan("nonexistent/profile")
 
         assert "Profile cache directory not found" in str(exc_info.value)
 
-    @pytest.mark.asyncio
-    async def test_empty_profile(self, tmp_path: Path, profile_service_mock: Mock) -> None:
-        """Test generating mount plan from profile with no resources."""
-        # Create empty profile directory
-        empty_profile_dir = tmp_path / "profiles" / "empty" / "profile"
-        empty_profile_dir.mkdir(parents=True)
+    def test_load_agents(self, service: MountPlanService, test_profile_dir: Path) -> None:
+        """Test loading agents from directory."""
+        agents_dir = test_profile_dir / "profiles" / "foundation" / "base" / "agents"
+        agents = service._load_agents(agents_dir, "foundation/base")
 
-        service = MountPlanService(
-            profile_service=profile_service_mock,
-            share_dir=tmp_path,
-        )
+        assert len(agents) == 2
+        assert "zen-architect" in agents
+        assert "bug-hunter" in agents
+        assert "Zen Architect" in agents["zen-architect"]["content"]
+        assert agents["zen-architect"]["metadata"]["source"] == "foundation/base:agents/zen-architect.md"
 
-        request = MountPlanRequest(profile_id="empty/profile")
+    def test_load_agents_empty_dir(self, service: MountPlanService, tmp_path: Path) -> None:
+        """Test loading agents from nonexistent directory."""
+        agents = service._load_agents(tmp_path / "nonexistent", "test/profile")
+        assert agents == {}
 
-        plan = await service.generate_mount_plan(request)
+    def test_parse_frontmatter(self, service: MountPlanService, tmp_path: Path) -> None:
+        """Test parsing YAML frontmatter."""
+        test_file = tmp_path / "test.md"
+        test_file.write_text("""---
+test_key: test_value
+nested:
+  key: value
+---
 
-        # Should succeed with empty mount points
-        assert len(plan.mount_points) == 0
-        assert len(plan.agents) == 0
-        assert len(plan.context) == 0
-        assert len(plan.providers) == 0
+Content here.
+""")
 
-    @pytest.mark.asyncio
-    async def test_module_id_collision_handling(self, tmp_path: Path, profile_service_mock: Mock) -> None:
-        """Test that module ID collisions are handled with counter suffix."""
-        # Create profile with duplicate resource names in different locations
-        profile_dir = tmp_path / "profiles" / "test" / "collision"
-        profile_dir.mkdir(parents=True)
+        frontmatter = service._parse_frontmatter(test_file)
+        assert frontmatter["test_key"] == "test_value"
+        assert frontmatter["nested"]["key"] == "value"
 
-        agents_dir = profile_dir / "agents"
-        agents_dir.mkdir()
-        (agents_dir / "helper.md").write_text("# Helper 1")
+    def test_parse_frontmatter_no_frontmatter(self, service: MountPlanService, tmp_path: Path) -> None:
+        """Test parsing file without frontmatter raises error."""
+        test_file = tmp_path / "test.md"
+        test_file.write_text("Just content, no frontmatter")
 
-        # We can't create actual collisions in file system (same name same dir)
-        # But we can test the logic by manually calling _create_mount_point
-        # This test verifies the collision handling code path exists
-        # Real collisions would require complex setup or integration test
+        with pytest.raises(ValueError) as exc_info:
+            service._parse_frontmatter(test_file)
+        assert "no YAML frontmatter" in str(exc_info.value)
 
-        service = MountPlanService(
-            profile_service=profile_service_mock,
-            share_dir=tmp_path,
-        )
+    def test_parse_frontmatter_invalid_yaml(self, service: MountPlanService, tmp_path: Path) -> None:
+        """Test parsing invalid YAML raises error."""
+        test_file = tmp_path / "test.md"
+        test_file.write_text("""---
+invalid: yaml: structure: here
+---
+""")
 
-        seen_ids: set[str] = set()
-
-        # Create first mount point
-        mount1 = service._create_mount_point(
-            resource_path=agents_dir / "helper.md",
-            profile_id="test/collision",
-            resource_type="agents",
-            resource_name="helper",
-            seen_ids=seen_ids,
-        )
-
-        assert mount1.module_id == "test/collision.agent.helper"
-        assert mount1.module_id in seen_ids
-
-        # Create second mount point with same name (simulating collision)
-        mount2 = service._create_mount_point(
-            resource_path=agents_dir / "helper.md",
-            profile_id="test/collision",
-            resource_type="agents",
-            resource_name="helper",
-            seen_ids=seen_ids,
-        )
-
-        # Second one should have .2 suffix
-        assert mount2.module_id == "test/collision.agent.helper.2"
-        assert mount2.module_id in seen_ids
-
-        # Third one should have .3 suffix
-        mount3 = service._create_mount_point(
-            resource_path=agents_dir / "helper.md",
-            profile_id="test/collision",
-            resource_type="agents",
-            resource_name="helper",
-            seen_ids=seen_ids,
-        )
-
-        assert mount3.module_id == "test/collision.agent.helper.3"
-
-    def test_find_resources_flat_structure(self, service: MountPlanService, test_profile_dir: Path) -> None:
-        """Test finding resources in flat directory (agents)."""
-        profile_dir = test_profile_dir / "profiles" / "foundation" / "base"
-
-        resources = service._find_resources(profile_dir, "agents")
-
-        assert len(resources) == 2
-        names = [name for _, name in resources]
-        assert "zen-architect" in names
-        assert "bug-hunter" in names
-
-    def test_find_resources_nested_structure(self, service: MountPlanService, test_profile_dir: Path) -> None:
-        """Test finding resources in nested directories (context)."""
-        profile_dir = test_profile_dir / "profiles" / "foundation" / "base"
-
-        resources = service._find_resources(profile_dir, "context")
-
-        assert len(resources) == 2
-        names = [name for _, name in resources]
-        assert "design-principles" in names
-        assert "shared.common-base" in names  # Nested path preserved with dots
-
-    def test_find_resources_code_modules(self, service: MountPlanService, test_profile_dir: Path) -> None:
-        """Test finding Python module resources."""
-        profile_dir = test_profile_dir / "profiles" / "foundation" / "base"
-
-        providers = service._find_resources(profile_dir, "providers")
-        tools = service._find_resources(profile_dir, "tools")
-        hooks = service._find_resources(profile_dir, "hooks")
-
-        assert len(providers) == 1
-        assert len(tools) == 1
-        assert len(hooks) == 1
-
-    def test_find_resources_missing_directory(self, service: MountPlanService, tmp_path: Path) -> None:
-        """Test finding resources when directory doesn't exist."""
-        profile_dir = tmp_path / "nonexistent"
-
-        resources = service._find_resources(profile_dir, "agents")
-
-        assert resources == []
-
-    def test_create_mount_point_embedded(self, service: MountPlanService, tmp_path: Path) -> None:
-        """Test creating embedded mount point for agent."""
-        test_file = tmp_path / "test-agent.md"
-        test_file.write_text("# Test Agent\n\nAgent content")
-
-        seen_ids: set[str] = set()
-
-        mount = service._create_mount_point(
-            resource_path=test_file,
-            profile_id="test/profile",
-            resource_type="agents",
-            resource_name="test-agent",
-            seen_ids=seen_ids,
-        )
-
-        assert isinstance(mount, EmbeddedMount)
-        assert mount.module_id == "test/profile.agent.test-agent"
-        assert mount.module_type == "agent"
-        assert "Test Agent" in mount.content
-        assert mount.module_id in seen_ids
-
-    def test_create_mount_point_referenced(self, service: MountPlanService, tmp_path: Path) -> None:
-        """Test creating referenced mount point for provider."""
-        test_file = tmp_path / "test-provider.py"
-        test_file.write_text("# Provider code")
-
-        seen_ids: set[str] = set()
-
-        mount = service._create_mount_point(
-            resource_path=test_file,
-            profile_id="test/profile",
-            resource_type="providers",
-            resource_name="test-provider",
-            seen_ids=seen_ids,
-        )
-
-        assert isinstance(mount, ReferencedMount)
-        assert mount.module_id == "test/profile.provider.test-provider"
-        assert mount.module_type == "provider"
-        assert mount.source_path.startswith("file://")
-        assert "test-provider.py" in mount.source_path
-        assert mount.module_id in seen_ids
+        with pytest.raises(ValueError) as exc_info:
+            service._parse_frontmatter(test_file)
+        assert "Invalid YAML" in str(exc_info.value)

@@ -58,7 +58,7 @@ collections/
 
 ## Services
 
-### SimpleModuleService
+### ModuleService
 
 Discovers modules from flattened modules directory via collection-organized hierarchy.
 
@@ -350,7 +350,7 @@ def test_collections_dir(tmp_path):
     return tmp_path
 
 def test_list_modules(test_collections_dir):
-    service = SimpleModuleService(test_collections_dir)
+    service = ModuleService(test_collections_dir)
     modules = service.list_modules()
     assert len(modules) > 0  # Tests real implementation
 ```

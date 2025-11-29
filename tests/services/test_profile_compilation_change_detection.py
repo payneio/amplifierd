@@ -34,7 +34,7 @@ def simple_profile() -> ProfileDetails:
         source="test",
         is_active=True,
         agents=[],
-        context=[],
+        context={},
         tools=[],
         hooks=[],
         providers=[],

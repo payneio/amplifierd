@@ -7,6 +7,7 @@ from datetime import UTC
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from amplifierd.models.mount_plans import MountPlan
 from amplifierd.models.sessions import SessionIndex
@@ -41,7 +42,7 @@ class SessionStateService:
         self,
         session_id: str,
         profile_name: str,
-        mount_plan: MountPlan,
+        mount_plan: MountPlan | dict[str, Any],
         parent_session_id: str | None = None,
         amplified_dir: str = ".",
     ) -> SessionMetadata:
@@ -79,7 +80,12 @@ class SessionStateService:
 
             # Write mount_plan.json
             mount_plan_path = session_dir / "mount_plan.json"
-            mount_plan_path.write_text(mount_plan.model_dump_json(indent=2))
+            if isinstance(mount_plan, dict):
+                import json
+
+                mount_plan_path.write_text(json.dumps(mount_plan, indent=2))
+            else:
+                mount_plan_path.write_text(mount_plan.model_dump_json(indent=2))
 
             # Create SessionMetadata with CREATED status
             now = datetime.now(UTC)

@@ -382,8 +382,13 @@ class ProfileDiscoveryService:
                     return None
 
                 # Parse context-manager (optional)
+                # Check for "context", "context-manager", or "context_manager" in session data
                 context_manager = None
-                context_manager_data = session_data.get("context-manager") or session_data.get("context_manager")
+                context_manager_data = (
+                    session_data.get("context")
+                    or session_data.get("context-manager")
+                    or session_data.get("context_manager")
+                )
                 if context_manager_data:
                     try:
                         context_manager = ModuleConfig(**context_manager_data)
@@ -410,11 +415,14 @@ class ProfileDiscoveryService:
                 logger.warning(f"Invalid agents field in {profile_file.name}: expected list or dict")
                 agents_data = []
 
-            if isinstance(context_data, dict):
-                context_data = list(context_data.values())
-            elif not isinstance(context_data, list):
+            # Keep context as dict to preserve names
+            # Context format: {name: ref} where name is used for directory naming
+            if isinstance(context_data, list):
+                # Convert list to dict with numeric keys for backward compat
+                context_data = {f"context_{i}": ref for i, ref in enumerate(context_data)}
+            elif not isinstance(context_data, dict):
                 logger.warning(f"Invalid context field in {profile_file.name}: expected list or dict")
-                context_data = []
+                context_data = {}
 
             # Create ProfileDetails
             manifest = ProfileDetails(

@@ -2,16 +2,12 @@
 
 from datetime import UTC
 from datetime import datetime
-from unittest.mock import AsyncMock
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from amplifierd.main import app
-from amplifierd.models.mount_plans import EmbeddedMount
-from amplifierd.models.mount_plans import MountPlan
-from amplifierd.models.mount_plans import SessionConfig
 from amplifierd.models.sessions import SessionMetadata
 from amplifierd.models.sessions import SessionStatus
 from amplifierd.routers.mount_plans import get_mount_plan_service
@@ -35,32 +31,33 @@ def mock_session_metadata() -> SessionMetadata:
 
 
 @pytest.fixture
-def mock_mount_plan() -> MountPlan:
+def mock_mount_plan() -> dict:
     """Sample mount plan for testing.
 
     Returns:
-        Sample mount plan with basic structure
+        Sample mount plan dict with basic structure
     """
-    return MountPlan(
-        format_version="1.0",
-        session=SessionConfig(
-            session_id="test_session_123",
-            profile_id="foundation/base",
-            created_at=datetime.now(UTC).isoformat(),
-            settings={},
-        ),
-        mount_points=[
-            EmbeddedMount(
-                module_id="foundation/base.agents.test-agent",
-                module_type="agent",
-                content="# Test Agent",
-            )
+    return {
+        "format_version": "1.0",
+        "session": {
+            "session_id": "test_session_123",
+            "profile_id": "foundation/base",
+            "created_at": datetime.now(UTC).isoformat(),
+            "settings": {},
+        },
+        "mount_points": [
+            {
+                "mount_type": "embedded",
+                "module_id": "foundation/base.agents.test-agent",
+                "module_type": "agent",
+                "content": "# Test Agent",
+            }
         ],
-    )
+    }
 
 
 @pytest.fixture
-def mock_mount_plan_service(mock_mount_plan: MountPlan) -> Mock:
+def mock_mount_plan_service(mock_mount_plan: dict) -> Mock:
     """Mock mount plan service.
 
     Args:
@@ -70,7 +67,7 @@ def mock_mount_plan_service(mock_mount_plan: MountPlan) -> Mock:
         Mock service
     """
     service = Mock()
-    service.generate_mount_plan = AsyncMock(return_value=mock_mount_plan)
+    service.generate_mount_plan = Mock(return_value=mock_mount_plan)
     return service
 
 
@@ -152,7 +149,7 @@ class TestSessionsAPI:
         mock_session_state_service.create_session.assert_called_once()
 
     def test_create_session_with_settings_overrides(self, client: TestClient, mock_mount_plan_service: Mock) -> None:
-        """Test POST /api/v1/sessions/ applies settings overrides."""
+        """Test POST /api/v1/sessions/ accepts settings overrides."""
         # Make request with settings overrides
         response = client.post(
             "/api/v1/sessions/",
@@ -165,10 +162,8 @@ class TestSessionsAPI:
         # Assert response
         assert response.status_code == 201
 
-        # Verify mount plan service was called with overrides
-        call_args = mock_mount_plan_service.generate_mount_plan.call_args
-        request = call_args[0][0]
-        assert request.settings_overrides == {"llm": {"model": "gpt-4"}}
+        # Verify mount plan service was called with profile_name
+        mock_mount_plan_service.generate_mount_plan.assert_called_once_with("foundation/base")
 
     def test_create_session_invalid_profile(self, client: TestClient, mock_mount_plan_service: Mock) -> None:
         """Test POST /api/v1/sessions/ returns 404 for invalid profile."""
@@ -454,14 +449,16 @@ class TestSessionsAPI:
         mock_session_state_service.cleanup_old_sessions.assert_called_once_with(older_than_days=30)
 
     def test_get_mount_plan_success(
-        self, client: TestClient, mock_session_state_service: Mock, mock_mount_plan: MountPlan, tmp_path
+        self, client: TestClient, mock_session_state_service: Mock, mock_mount_plan: dict, tmp_path
     ) -> None:
         """Test GET /api/v1/sessions/{session_id}/mount-plan returns mount plan."""
         # Create mock mount plan file
+        import json
+
         session_dir = tmp_path / "sessions" / "test_session_123"
         session_dir.mkdir(parents=True)
         mount_plan_path = session_dir / "mount_plan.json"
-        mount_plan_path.write_text(mock_mount_plan.model_dump_json())
+        mount_plan_path.write_text(json.dumps(mock_mount_plan))
 
         # Mock get_state_dir to return tmp_path
         import amplifierd.routers.sessions
@@ -500,7 +497,7 @@ class TestSessionsAPI:
     ) -> None:
         """Test create_session with unexpected error during mount plan generation."""
         # Mock mount plan service to raise generic Exception
-        mock_mount_plan_service.generate_mount_plan = AsyncMock(
+        mock_mount_plan_service.generate_mount_plan = Mock(
             side_effect=Exception("Unexpected error in mount plan generation")
         )
 

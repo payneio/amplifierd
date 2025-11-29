@@ -21,17 +21,7 @@ class TestExecutionRunner:
         runner = ExecutionRunner(config=config)
 
         assert runner.config == config
-        assert runner.search_paths == []
         assert runner._session is None
-
-    def test_execution_runner_with_search_paths(self, tmp_path) -> None:
-        """Test ExecutionRunner accepts search paths."""
-        from pathlib import Path
-
-        paths = [Path("/path1"), Path("/path2")]
-        runner = ExecutionRunner(config={}, search_paths=paths)
-
-        assert runner.search_paths == paths
 
     @pytest.mark.asyncio
     async def test_execute_adds_user_message(self, sample_session: Session, mock_amplifier_module) -> None:

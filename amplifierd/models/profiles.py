@@ -71,4 +71,4 @@ class ProfileDetails(CamelCaseModel):
     hooks: list[ModuleConfig] = Field(description="Hook modules")
     session: SessionConfig | None = Field(default=None, description="Session configuration (schema v2)")
     agents: list[str] = Field(default_factory=list, description="Agent file references")
-    context: list[str] = Field(default_factory=list, description="Context directory references")
+    context: dict[str, str] = Field(default_factory=dict, description="Context directory references (name -> ref)")

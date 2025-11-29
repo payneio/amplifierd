@@ -120,44 +120,50 @@ class TestExecutionStreamWrapping:
     async def test_wrap_execution_stream_yields_events(self, mock_amplifier_module) -> None:
         """Test wrap_execution_stream yields message and done events."""
 
-        async def mock_execute():
-            return "This is the response"
+        async def mock_token_stream():
+            yield "This "
+            yield "is "
+            yield "the "
+            yield "response"
 
         events = []
-        async for event in wrap_execution_stream(mock_execute()):
+        async for event in wrap_execution_stream(mock_token_stream()):
             events.append(event)
 
-        # Should yield message event and done event
-        assert len(events) == 2
+        # Should yield 4 message events (one per token) and 1 done event
+        assert len(events) == 5
         assert events[0]["event"] == "message"
-        assert events[0]["data"]["content"] == "This is the response"
-        assert events[1]["event"] == "done"
+        assert events[0]["data"]["content"] == "This "
+        assert events[1]["data"]["content"] == "is "
+        assert events[4]["event"] == "done"
 
     @pytest.mark.asyncio
     async def test_wrap_execution_stream_handles_errors(self) -> None:
         """Test wrap_execution_stream yields error event on failure."""
 
-        async def failing_execute():
+        async def failing_token_stream():
+            yield "Starting..."
             raise RuntimeError("Execution failed")
 
         events = []
-        async for event in wrap_execution_stream(failing_execute()):
+        async for event in wrap_execution_stream(failing_token_stream()):
             events.append(event)
 
-        # Should yield error event
-        assert len(events) == 1
-        assert events[0]["event"] == "error"
-        assert "Execution failed" in events[0]["data"]["error"]
+        # Should yield message event then error event
+        assert len(events) == 2
+        assert events[0]["event"] == "message"
+        assert events[1]["event"] == "error"
+        assert "Execution failed" in events[1]["data"]["error"]
 
     @pytest.mark.asyncio
     async def test_wrap_execution_stream_event_structure(self, mock_amplifier_module) -> None:
         """Test wrap_execution_stream creates properly structured events."""
 
-        async def mock_execute():
-            return "Test response"
+        async def mock_token_stream():
+            yield "Test response"
 
         events = []
-        async for event in wrap_execution_stream(mock_execute()):
+        async for event in wrap_execution_stream(mock_token_stream()):
             events.append(event)
 
         # Verify message event structure

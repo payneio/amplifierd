@@ -79,7 +79,9 @@ class ReferencedMount(CamelCaseModel):
 
     mount_type: Literal["referenced"] = "referenced"
     module_id: str = Field(description="Unique module ID: {profile}.{type}.{name}")
-    module_type: Literal["provider", "tool", "hook"] = Field(description="Type of referenced module")
+    module_type: Literal["orchestrator", "context-manager", "provider", "tool", "hook"] = Field(
+        description="Type of referenced module"
+    )
     source_path: str = Field(description="file:// URL to cached module")
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -178,9 +180,13 @@ class MountPlan(CamelCaseModel):
         default=None,
         description="Orchestrator configuration (computed from mount_points)",
     )
+    context_manager: dict[str, Any] | None = Field(
+        default=None,
+        description="Context manager configuration (computed from mount_points)",
+    )
     context: dict[str, MountPoint] = Field(
         default_factory=dict,
-        description="Context modules organized by module_id (computed)",
+        description="Embedded context content organized by module_id (computed)",
     )
     agents: dict[str, MountPoint] = Field(
         default_factory=dict,
@@ -219,13 +225,13 @@ class MountPlan(CamelCaseModel):
         """Group mount points by module type for convenient access.
 
         Iterates through the flat mount_points list and populates the typed
-        dictionaries (agents, context, providers, tools, hooks) based on each
-        mount point's module_type field.
+        dictionaries (agents, context, providers, tools, hooks) and the
+        orchestrator configuration based on each mount point's module_type field.
 
         Module IDs are used as dictionary keys for O(1) lookup.
 
         Note:
-            - orchestrator and profiles are not implemented yet (reserved for future)
+            - profiles are not implemented yet (reserved for future)
             - Existing entries in organized dicts are preserved (useful for testing)
         """
         for mount in self.mount_points:
@@ -235,6 +241,24 @@ class MountPlan(CamelCaseModel):
             elif mount.module_type == "context":
                 self.context[mount.module_id] = mount
 
+            # Orchestrator (referenced module, but stored as single config not dict)
+            elif mount.module_type == "orchestrator":
+                # Store orchestrator mount as the orchestrator configuration
+                self.orchestrator = {
+                    "module": mount.module_id,
+                    "source": mount.source_path,
+                    "config": mount.metadata.get("config", {}),
+                }
+
+            # Context manager (referenced module, stored as single config)
+            elif mount.module_type == "context-manager":
+                # Store context-manager mount as the context_manager configuration
+                self.context_manager = {
+                    "module": mount.module_id,
+                    "source": mount.source_path,
+                    "config": mount.metadata.get("config", {}),
+                }
+
             # ReferencedMount types (providers, tools, hooks)
             elif mount.module_type == "provider":
                 self.providers[mount.module_id] = mount
@@ -243,8 +267,8 @@ class MountPlan(CamelCaseModel):
             elif mount.module_type == "hook":
                 self.hooks[mount.module_id] = mount
 
-            # Future support for orchestrator and profiles
-            # These are placeholders for when those features are implemented
+            # Future support for profiles
+            # This is a placeholder for when that feature is implemented
 
 
 class MountPlanRequest(CamelCaseModel):
