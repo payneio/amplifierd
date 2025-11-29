@@ -117,8 +117,14 @@ class StatusContextHook:
         try:
             # Get working directory - prefer session CWD if available
             session = getattr(self.coordinator, "session", None)
-            session_cwd = session.context.get("session_cwd") if session and hasattr(session, "context") else None
-            working_dir = session_cwd if session_cwd else str(Path.cwd())
+            if session and hasattr(session, "session_cwd"):
+                # Access session_cwd field directly from SessionMetadata
+                from amplifier_library.storage.paths import get_data_path
+
+                data_dir = get_data_path()
+                working_dir = str((data_dir / session.session_cwd).resolve())
+            else:
+                working_dir = str(Path.cwd())
 
             # Detect if in git repo
             is_git_repo = self._run_git(["rev-parse", "--git-dir"]) is not None
@@ -218,8 +224,13 @@ class StatusContextHook:
         try:
             # Use session CWD if available, otherwise process CWD
             session = getattr(self.coordinator, "session", None)
-            session_cwd = session.context.get("session_cwd") if session and hasattr(session, "context") else None
-            cwd = Path(session_cwd) if session_cwd else Path.cwd()
+            if session and hasattr(session, "session_cwd"):
+                from amplifier_library.storage.paths import get_data_path
+
+                data_dir = get_data_path()
+                cwd = (data_dir / session.session_cwd).resolve()
+            else:
+                cwd = Path.cwd()
 
             result = subprocess.run(
                 ["git"] + args,
