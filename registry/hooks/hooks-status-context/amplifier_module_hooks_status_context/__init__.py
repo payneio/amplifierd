@@ -117,14 +117,22 @@ class StatusContextHook:
         try:
             # Get working directory - prefer session CWD if available
             session = getattr(self.coordinator, "session", None)
+            logger.warning(f"[DEBUG-CWD] Session object: {session}")
+            logger.warning(f"[DEBUG-CWD] Session type: {type(session)}")
+            if session:
+                logger.warning(f"[DEBUG-CWD] Has session_cwd attr: {hasattr(session, 'session_cwd')}")
+                logger.warning(f"[DEBUG-CWD] Session __dict__: {getattr(session, '__dict__', 'No __dict__')}")
+
             if session and hasattr(session, "session_cwd"):
                 # Access session_cwd field directly from SessionMetadata
                 from amplifier_library.storage.paths import get_data_path
 
                 data_dir = get_data_path()
                 working_dir = str((data_dir / session.session_cwd).resolve())
+                logger.warning(f"[DEBUG-CWD] Using session CWD: {working_dir}")
             else:
                 working_dir = str(Path.cwd())
+                logger.warning(f"[DEBUG-CWD] Using process CWD (fallback): {working_dir}")
 
             # Detect if in git repo
             is_git_repo = self._run_git(["rev-parse", "--git-dir"]) is not None
