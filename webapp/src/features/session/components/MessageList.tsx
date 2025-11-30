@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { SessionMessage } from '@/types/api';
 import { User, Bot } from 'lucide-react';
 
@@ -43,7 +45,15 @@ export function MessageList({ messages, streamingContent }: MessageListProps) {
                   : 'bg-muted'
               }`}
             >
-              <div className="whitespace-pre-wrap break-words">{message.content}</div>
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                {isUser ? (
+                  <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                ) : (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                )}
+              </div>
               <div className="text-xs opacity-70 mt-1">
                 {new Date(message.timestamp).toLocaleTimeString()}
               </div>
@@ -64,7 +74,11 @@ export function MessageList({ messages, streamingContent }: MessageListProps) {
             <Bot className="h-4 w-4 text-primary animate-pulse" />
           </div>
           <div className="max-w-[80%] rounded-lg p-3 bg-muted">
-            <div className="whitespace-pre-wrap break-words">{streamingContent}</div>
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {streamingContent}
+              </ReactMarkdown>
+            </div>
             <div className="text-xs opacity-70 mt-1">Streaming...</div>
           </div>
         </div>

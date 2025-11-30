@@ -30,10 +30,7 @@ export function ToolCallDisplay({ sessionId, eventStream }: ToolCallDisplayProps
   const [toolStatus, setToolStatus] = useState<ToolStatus | null>(null);
 
   useEffect(() => {
-    console.log('[ToolCallDisplay] Setting up hook:tool:pre handler for:', sessionId);
-
     const unsubPre = eventStream.on('hook:tool:pre', (data) => {
-      console.log('[ToolCallDisplay] hook:tool:pre received:', data);
       const hookData = data as HookEventData;
       const toolName = hookData.hook_data?.tool_name || 'Unknown Tool';
       const toolArgs = hookData.hook_data?.tool_input;
@@ -46,7 +43,6 @@ export function ToolCallDisplay({ sessionId, eventStream }: ToolCallDisplayProps
     });
 
     const unsubPost = eventStream.on('hook:tool:post', (data) => {
-      console.log('[ToolCallDisplay] hook:tool:post received:', data);
       const hookData = data as HookEventData;
       const toolName = hookData.hook_data?.tool_name || 'Unknown Tool';
       const toolResult = hookData.hook_data?.tool_response;

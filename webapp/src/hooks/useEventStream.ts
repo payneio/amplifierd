@@ -54,11 +54,9 @@ export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
 
     // Prevent duplicate connections (especially from React StrictMode double-mounting)
     if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) {
-      console.log('[useEventStream] Connection already exists, skipping');
       return;
     }
 
-    console.log('[useEventStream] Creating new connection for:', sessionId);
     isConnectedRef.current = true;
 
     const eventSource = new EventSource(
@@ -69,7 +67,6 @@ export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
-      console.log('[useEventStream] Connection opened for:', sessionId);
       setState({ status: 'connected' });
       emit('connected', {});
     };
@@ -84,11 +81,8 @@ export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
     // Handle named events by adding listeners for specific event types
     const addNamedEventListener = (eventName: string) => {
       eventSource.addEventListener(eventName, (event) => {
-        console.log(`[useEventStream] Received raw event "${eventName}":`, event.data);
         try {
           const parsed = JSON.parse(event.data);
-          console.log(`[useEventStream] Parsed event "${eventName}":`, parsed);
-          console.log(`[useEventStream] Emitting to ${handlersRef.current.get(eventName)?.size || 0} handlers`);
           emit(eventName, parsed);
         } catch (error) {
           console.error(`Error parsing ${eventName} event:`, error);
@@ -98,12 +92,10 @@ export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
 
     // Register listeners for known named events
     // Message lifecycle events
-    console.log('[useEventStream] Registering event listeners...');
     addNamedEventListener('user_message_saved');
     addNamedEventListener('assistant_message_start');
     addNamedEventListener('content');
     addNamedEventListener('assistant_message_complete');
-    console.log('[useEventStream] Registered message lifecycle listeners');
 
     // Hook events
     addNamedEventListener('hook:tool:pre');
@@ -117,15 +109,7 @@ export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
     // by onopen and onerror callbacks. EventSource error events don't have
     // event.data, causing JSON parse errors if we try to listen for them.
 
-    // Add generic message handler to catch any unhandled events (debugging)
-    eventSource.onmessage = (event) => {
-      console.log('[useEventStream] GENERIC onmessage fired (event without explicit type):', event);
-      console.log('[useEventStream] Event type:', event.type);
-      console.log('[useEventStream] Event data:', event.data);
-    };
-
     return () => {
-      console.log('[useEventStream] Cleanup called, closing connection');
       eventSource.close();
       eventSourceRef.current = null;
       isConnectedRef.current = false;

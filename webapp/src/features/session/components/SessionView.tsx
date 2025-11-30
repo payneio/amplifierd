@@ -103,22 +103,18 @@ export function SessionView() {
   React.useEffect(() => {
     if (!sessionId) return;
 
-    console.log('[SessionView] Setting up SSE handlers for:', sessionId);
-
     const unsubscribers = [
       // User message saved
       eventStream.on('user_message_saved', (data: unknown) => {
-        console.log('[SSE Event] user_message_saved:', data);
         const msgData = data as MessageEventData;
-        setLocalMessages((prev) => {
-          const updated = [...prev, {
+        setLocalMessages((prev) => [
+          ...prev,
+          {
             role: 'user' as const,
             content: msgData.content,
             timestamp: msgData.timestamp,
-          }];
-          console.log('[State] localMessages updated, count:', updated.length);
-          return updated;
-        });
+          },
+        ]);
       }),
 
       // Assistant message start
@@ -129,7 +125,6 @@ export function SessionView() {
       // Content streaming
       eventStream.on('content', (data: unknown) => {
         const contentData = data as ContentEventData;
-        console.log('[SSE Event] content, length:', contentData.content?.length);
         if (contentData.type === 'content' && contentData.content) {
           setStreamingContent((prev) => prev + contentData.content);
         }
@@ -137,17 +132,15 @@ export function SessionView() {
 
       // Assistant message complete
       eventStream.on('assistant_message_complete', (data: unknown) => {
-        console.log('[SSE Event] assistant_message_complete:', data);
         const msgData = data as MessageEventData;
-        setLocalMessages((prev) => {
-          const updated = [...prev, {
+        setLocalMessages((prev) => [
+          ...prev,
+          {
             role: 'assistant' as const,
             content: msgData.content,
             timestamp: msgData.timestamp,
-          }];
-          console.log('[State] localMessages after assistant complete, count:', updated.length);
-          return updated;
-        });
+          },
+        ]);
         setStreamingContent('');
         setIsSending(false);
       }),
