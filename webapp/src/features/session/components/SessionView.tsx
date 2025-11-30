@@ -1,17 +1,17 @@
-import React from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Play, RefreshCw } from 'lucide-react';
-import { useSession } from '../hooks/useSession';
-import { MessageList } from './MessageList';
-import { MessageInput } from './MessageInput';
-import { ToolCallDisplay } from './ToolCallDisplay';
-import { ApprovalDialog } from './ApprovalDialog';
-import { useEventStream } from '@/hooks/useEventStream';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { BASE_URL } from '@/api/client';
 import { listProfiles } from '@/api/profiles';
 import { changeProfile } from '@/api/sessions';
-import { BASE_URL } from '@/api/client';
+import { useEventStream } from '@/hooks/useEventStream';
 import type { SessionMessage } from '@/types/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Play, RefreshCw } from 'lucide-react';
+import React from 'react';
+import { useNavigate, useParams } from 'react-router';
+import { useSession } from '../hooks/useSession';
+import { ApprovalDialog } from './ApprovalDialog';
+import { MessageInput } from './MessageInput';
+import { MessageList } from './MessageList';
+import { ToolCallDisplay } from './ToolCallDisplay';
 
 interface MessageEventData {
   role?: 'user' | 'assistant';
@@ -34,8 +34,8 @@ export function SessionView() {
   const [isSending, setIsSending] = React.useState(false);
   const [streamingContent, setStreamingContent] = React.useState<string>('');
 
-  // Local message state (initialized from transcript, updated via SSE)
-  const [localMessages, setLocalMessages] = React.useState<SessionMessage[]>([]);
+  // SSE messages ONLY (don't duplicate transcript)
+  const [sseMessages, setSseMessages] = React.useState<SessionMessage[]>([]);
 
   // Fetch available profiles
   const { data: profiles } = useQuery({
@@ -80,22 +80,16 @@ export function SessionView() {
     },
   });
 
-  // Initialize messages from transcript on first load
-  // Track if we've already initialized to prevent infinite loops
-  const transcriptInitialized = React.useRef(false);
-
+  // Clear SSE messages when navigating to different session
   React.useEffect(() => {
-    if (transcript && !transcriptInitialized.current) {
-      setLocalMessages(transcript);
-      transcriptInitialized.current = true;
-    }
-  }, [transcript]);
-
-  // Reset when sessionId changes
-  React.useEffect(() => {
-    transcriptInitialized.current = false;
-    setLocalMessages([]);
+    setSseMessages([]);
   }, [sessionId]);
+
+  // Combine transcript (historical) + SSE messages (new)
+  const allMessages = React.useMemo(() => {
+    const combined = [...(transcript || []), ...sseMessages];
+    return combined;
+  }, [transcript, sseMessages]);
 
   // Wire up SSE event handlers
   // Note: Only depend on sessionId and stable 'on' function (from useCallback),
@@ -107,14 +101,17 @@ export function SessionView() {
       // User message saved
       eventStream.on('user_message_saved', (data: unknown) => {
         const msgData = data as MessageEventData;
-        setLocalMessages((prev) => [
-          ...prev,
-          {
-            role: 'user' as const,
-            content: msgData.content,
-            timestamp: msgData.timestamp,
-          },
-        ]);
+        setSseMessages((prev) => {
+          const updated = [
+            ...prev,
+            {
+              role: 'user' as const,
+              content: msgData.content,
+              timestamp: msgData.timestamp,
+            },
+          ];
+          return updated;
+        });
       }),
 
       // Assistant message start
@@ -133,14 +130,17 @@ export function SessionView() {
       // Assistant message complete
       eventStream.on('assistant_message_complete', (data: unknown) => {
         const msgData = data as MessageEventData;
-        setLocalMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant' as const,
-            content: msgData.content,
-            timestamp: msgData.timestamp,
-          },
-        ]);
+        setSseMessages((prev) => {
+          const updated = [
+            ...prev,
+            {
+              role: 'assistant' as const,
+              content: msgData.content,
+              timestamp: msgData.timestamp,
+            },
+          ];
+          return updated;
+        });
         setStreamingContent('');
         setIsSending(false);
       }),
@@ -265,7 +265,7 @@ export function SessionView() {
 
       {/* Messages */}
       <MessageList
-        messages={localMessages}
+        messages={allMessages}
         streamingContent={streamingContent}
       />
 

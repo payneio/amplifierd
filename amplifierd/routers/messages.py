@@ -147,14 +147,14 @@ async def send_message_for_execution(
         registry = get_stream_registry()
         manager = await registry.get_or_create(session_id, mount_plan)
 
+        # Note: Don't save user message here - ExecutionRunner.execute_stream() does it
+        # to avoid duplicates in transcript
+
         # Emit user_message_saved to ALL subscribers
         await manager.emitter.emit(
             "user_message_saved",
             {"role": "user", "content": request.content, "timestamp": datetime.now(UTC).isoformat()},
         )
-
-        # Save user message
-        service.append_message(session_id=session_id, role="user", content=request.content)
 
         # Get runner
         runner = await manager.get_runner(session)
@@ -178,11 +178,11 @@ async def send_message_for_execution(
                     # Emit each token to ALL subscribers
                     await manager.emitter.emit("content", {"type": "content", "content": token})
 
-                # Save assistant response
-                if full_response:
-                    service.append_message(session_id=session_id, role="assistant", content=full_response)
+                # Note: Don't save assistant message here - ExecutionRunner.execute_stream() does it
+                # to avoid duplicates in transcript
 
-                    # Emit completion
+                # Emit completion to ALL subscribers
+                if full_response:
                     await manager.emitter.emit(
                         "assistant_message_complete",
                         {
