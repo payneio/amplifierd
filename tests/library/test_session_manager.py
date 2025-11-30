@@ -4,198 +4,177 @@ Unit tests for SessionManager.
 Tests session CRUD operations, persistence, and error handling.
 """
 
+import uuid
 from datetime import UTC
 from datetime import datetime
 
 import pytest
 
-from amplifier_library.models import Session
-from amplifier_library.models import SessionInfo
+from amplifier_library.models.sessions import SessionMetadata
 from amplifier_library.sessions.manager import SessionManager
-from amplifier_library.storage.json_store import exists
 
 
 @pytest.mark.unit
 class TestSessionManager:
     """Test SessionManager operations."""
 
-    def test_create_session_generates_unique_id(self, session_manager: SessionManager) -> None:
-        """Test create_session generates unique session IDs."""
-        session1 = session_manager.create_session(profile="default")
-        session2 = session_manager.create_session(profile="default")
+    def test_create_session_with_explicit_id(self, session_manager: SessionManager) -> None:
+        """Test create_session with explicit session ID."""
+        session_id = str(uuid.uuid4())
+        session = session_manager.create_session(session_id=session_id, profile_name="default")
 
-        assert session1.id != session2.id
-        assert len(session1.id) > 0
-        assert len(session2.id) > 0
+        assert session.session_id == session_id
+        assert session.profile_name == "default"
+
+    def test_create_session_raises_on_duplicate_id(self, session_manager: SessionManager) -> None:
+        """Test create_session raises error for duplicate session ID."""
+        session_id = str(uuid.uuid4())
+        session_manager.create_session(session_id=session_id, profile_name="default")
+
+        with pytest.raises(ValueError, match="already exists"):
+            session_manager.create_session(session_id=session_id, profile_name="default")
 
     def test_create_session_sets_profile(self, session_manager: SessionManager) -> None:
         """Test create_session sets the correct profile."""
-        session = session_manager.create_session(profile="test-profile")
-        assert session.profile == "test-profile"
-
-    def test_create_session_with_context(self, session_manager: SessionManager) -> None:
-        """Test create_session stores context data."""
-        context = {"user_id": "123", "environment": "test"}
-        session = session_manager.create_session(profile="default", context=context)
-
-        assert session.context == context
-        assert session.context["user_id"] == "123"
-
-    def test_create_session_without_context(self, session_manager: SessionManager) -> None:
-        """Test create_session with no context creates empty dict."""
-        session = session_manager.create_session(profile="default")
-        assert session.context == {}
+        session = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="test-profile")
+        assert session.profile_name == "test-profile"
 
     def test_create_session_sets_timestamps(self, session_manager: SessionManager) -> None:
-        """Test create_session sets created_at and updated_at."""
+        """Test create_session sets created_at timestamp."""
         before = datetime.now(UTC)
-        session = session_manager.create_session(profile="default")
+        session = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="default")
         after = datetime.now(UTC)
 
         assert before <= session.created_at <= after
-        assert before <= session.updated_at <= after
-        # Timestamps should be very close (within 1 second)
-        time_diff = abs((session.updated_at - session.created_at).total_seconds())
-        assert time_diff < 1.0
 
     def test_create_session_initializes_message_count(self, session_manager: SessionManager) -> None:
         """Test create_session sets message_count to 0."""
-        session = session_manager.create_session(profile="default")
+        session = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="default")
         assert session.message_count == 0
 
     def test_create_session_persists_to_storage(self, session_manager: SessionManager) -> None:
         """Test create_session saves session to storage immediately."""
-        session = session_manager.create_session(profile="default")
-        assert exists(session.id, category="sessions")
+        session_id = str(uuid.uuid4())
+        session_manager.create_session(session_id=session_id, profile_name="default")
 
-    def test_resume_session_loads_existing(self, session_manager: SessionManager, sample_session: Session) -> None:
-        """Test resume_session loads an existing session."""
-        resumed = session_manager.resume_session(sample_session.id)
+        session_dir = session_manager.storage_dir / session_id
+        assert session_dir.exists()
+        assert (session_dir / "session.json").exists()
+        assert (session_dir / "transcript.jsonl").exists()
 
-        assert resumed.id == sample_session.id
-        assert resumed.profile == sample_session.profile
-        assert resumed.context == sample_session.context
+    def test_get_session_loads_existing(self, session_manager: SessionManager, sample_session: SessionMetadata) -> None:
+        """Test get_session loads an existing session."""
+        loaded = session_manager.get_session(sample_session.session_id)
 
-    def test_resume_session_raises_for_nonexistent(self, session_manager: SessionManager) -> None:
-        """Test resume_session raises FileNotFoundError for nonexistent session."""
-        with pytest.raises(FileNotFoundError, match="Session .* not found"):
-            session_manager.resume_session("nonexistent-session-id")
+        assert loaded is not None
+        assert loaded.session_id == sample_session.session_id
+        assert loaded.profile_name == sample_session.profile_name
+
+    def test_get_session_returns_none_for_nonexistent(self, session_manager: SessionManager) -> None:
+        """Test get_session returns None for nonexistent session."""
+        result = session_manager.get_session("nonexistent-session-id")
+        assert result is None
 
     def test_list_sessions_returns_all(self, session_manager: SessionManager) -> None:
         """Test list_sessions returns all created sessions."""
-        session1 = session_manager.create_session(profile="profile1")
-        session2 = session_manager.create_session(profile="profile2")
+        session1 = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="profile1")
+        session2 = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="profile2")
 
         sessions = session_manager.list_sessions()
 
         assert len(sessions) >= 2
-        ids = [s.id for s in sessions]
-        assert session1.id in ids
-        assert session2.id in ids
+        ids = [s.session_id for s in sessions]
+        assert session1.session_id in ids
+        assert session2.session_id in ids
 
-    def test_list_sessions_sorted_by_updated_at(self, session_manager: SessionManager) -> None:
-        """Test list_sessions returns sessions sorted by updated_at (newest first)."""
-        session1 = session_manager.create_session(profile="first")
-        session2 = session_manager.create_session(profile="second")
+    def test_list_sessions_sorted_by_created_at(self, session_manager: SessionManager) -> None:
+        """Test list_sessions returns sessions sorted by created_at (newest first)."""
+        session1 = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="first")
+        session2 = session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="second")
 
         sessions = session_manager.list_sessions()
 
         # Find our sessions in the list
-        s1 = next(s for s in sessions if s.id == session1.id)
-        s2 = next(s for s in sessions if s.id == session2.id)
+        s1 = next(s for s in sessions if s.session_id == session1.session_id)
+        s2 = next(s for s in sessions if s.session_id == session2.session_id)
 
         # Second session should come before first (newer)
         s1_index = sessions.index(s1)
         s2_index = sessions.index(s2)
         assert s2_index < s1_index
 
-    def test_list_sessions_returns_session_info(self, session_manager: SessionManager, sample_session: Session) -> None:
-        """Test list_sessions returns SessionInfo objects with correct data."""
-        sessions = session_manager.list_sessions()
-
-        # Find our sample session
-        info = next(s for s in sessions if s.id == sample_session.id)
-
-        assert isinstance(info, SessionInfo)
-        assert info.id == sample_session.id
-        assert info.profile == sample_session.profile
-        assert info.message_count == 0
-
-    def test_get_session_info_returns_metadata(self, session_manager: SessionManager, sample_session: Session) -> None:
-        """Test get_session_info returns session metadata."""
-        info = session_manager.get_session_info(sample_session.id)
-
-        assert info is not None
-        assert info.id == sample_session.id
-        assert info.profile == sample_session.profile
-        assert info.message_count == 0
-
-    def test_get_session_info_returns_none_for_nonexistent(self, session_manager: SessionManager) -> None:
-        """Test get_session_info returns None for nonexistent session."""
-        info = session_manager.get_session_info("nonexistent-id")
-        assert info is None
-
     def test_delete_session_removes_from_storage(
-        self, session_manager: SessionManager, sample_session: Session
+        self, session_manager: SessionManager, sample_session: SessionMetadata
     ) -> None:
         """Test delete_session removes session from storage."""
-        assert exists(sample_session.id, category="sessions")
+        session_dir = session_manager.storage_dir / sample_session.session_id
+        assert session_dir.exists()
 
-        session_manager.delete_session(sample_session.id)
+        result = session_manager.delete_session(sample_session.session_id)
 
-        assert not exists(sample_session.id, category="sessions")
+        assert result is True
+        assert not session_dir.exists()
 
-    def test_delete_nonexistent_session_raises_error(self, session_manager: SessionManager) -> None:
-        """Test delete_session raises FileNotFoundError for nonexistent session."""
-        with pytest.raises(FileNotFoundError):
-            session_manager.delete_session("nonexistent-id")
+    def test_delete_nonexistent_session_returns_false(self, session_manager: SessionManager) -> None:
+        """Test delete_session returns False for nonexistent session."""
+        result = session_manager.delete_session("nonexistent-id")
+        assert result is False
 
-    def test_save_session_updates_timestamp(self, session_manager: SessionManager, sample_session: Session) -> None:
-        """Test save_session updates the updated_at timestamp."""
-        original_updated = sample_session.updated_at
+    def test_append_message(self, session_manager: SessionManager, sample_session: SessionMetadata) -> None:
+        """Test append_message adds message to transcript."""
+        session_manager.append_message(session_id=sample_session.session_id, role="user", content="Hello, world!")
 
-        # Modify and save
-        sample_session.context["new_key"] = "new_value"
-        session_manager.save_session(sample_session)
+        # Verify message was appended by reading transcript
+        transcript = session_manager.get_transcript(sample_session.session_id)
+        assert len(transcript) == 1
+        assert transcript[0].role == "user"
+        assert transcript[0].content == "Hello, world!"
 
-        # Reload and verify
-        reloaded = session_manager.resume_session(sample_session.id)
-        assert reloaded.updated_at > original_updated
-        assert reloaded.context["new_key"] == "new_value"
+        # Verify message count updated
+        session = session_manager.get_session(sample_session.session_id)
+        assert session is not None
+        assert session.message_count == 1
 
-    def test_save_session_preserves_data(self, session_manager: SessionManager) -> None:
-        """Test save_session preserves all session data correctly."""
-        session = session_manager.create_session(profile="test-profile", context={"key1": "value1"})
+    def test_get_transcript(self, session_manager: SessionManager, sample_session: SessionMetadata) -> None:
+        """Test get_transcript returns all messages."""
+        session_manager.append_message(sample_session.session_id, "user", "Message 1")
+        session_manager.append_message(sample_session.session_id, "assistant", "Message 2")
 
-        # Modify session
-        session.context["key2"] = "value2"
-        session.message_count = 5
-        session_manager.save_session(session)
+        transcript = session_manager.get_transcript(sample_session.session_id)
 
-        # Reload and verify
-        reloaded = session_manager.resume_session(session.id)
-        assert reloaded.profile == "test-profile"
-        assert reloaded.context["key1"] == "value1"
-        assert reloaded.context["key2"] == "value2"
-        assert reloaded.message_count == 5
+        assert len(transcript) == 2
+        assert transcript[0].content == "Message 1"
+        assert transcript[1].content == "Message 2"
+
+    def test_get_transcript_with_limit(self, session_manager: SessionManager, sample_session: SessionMetadata) -> None:
+        """Test get_transcript with limit returns last N messages."""
+        for i in range(5):
+            session_manager.append_message(sample_session.session_id, "user", f"Message {i}")
+
+        transcript = session_manager.get_transcript(sample_session.session_id, limit=2)
+
+        assert len(transcript) == 2
+        assert transcript[0].content == "Message 3"
+        assert transcript[1].content == "Message 4"
 
     def test_session_lifecycle(self, session_manager: SessionManager) -> None:
-        """Test complete session lifecycle: create, modify, resume, delete."""
+        """Test complete session lifecycle: create, append, load, delete."""
         # Create
-        session = session_manager.create_session(profile="lifecycle-test")
-        session_id = session.id
+        session_id = str(uuid.uuid4())
+        session_manager.create_session(session_id=session_id, profile_name="lifecycle-test")
 
         # Verify exists
-        assert exists(session_id, category="sessions")
+        session_dir = session_manager.storage_dir / session_id
+        assert session_dir.exists()
 
-        # Modify
-        session.context["step"] = 1
-        session_manager.save_session(session)
+        # Append message
+        session_manager.append_message(session_id, "user", "Test message")
 
-        # Resume
-        resumed = session_manager.resume_session(session_id)
-        assert resumed.context["step"] == 1
+        # Load
+        loaded = session_manager.get_session(session_id)
+        assert loaded is not None
+        assert loaded.message_count == 1
 
         # Delete
         session_manager.delete_session(session_id)
-        assert not exists(session_id, category="sessions")
+        assert not session_dir.exists()

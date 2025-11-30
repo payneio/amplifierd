@@ -1,12 +1,13 @@
 """Amplified directories API endpoints."""
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 
-from amplifier_library.storage.paths import get_root_working_dir
+from amplifier_library.config.loader import load_config
 from amplifierd.models.amplified_directories import AmplifiedDirectory
 from amplifierd.models.amplified_directories import AmplifiedDirectoryCreate
 from amplifierd.models.amplified_directories import AmplifiedDirectoryList
@@ -20,8 +21,9 @@ router = APIRouter(prefix="/api/v1/amplified-directories", tags=["amplified-dire
 
 def get_service() -> AmplifiedDirectoryService:
     """Get amplified directory service instance."""
-    root_dir = get_root_working_dir()
-    return AmplifiedDirectoryService(root_dir)
+    config = load_config()
+    data_path = Path(config.data_path)
+    return AmplifiedDirectoryService(data_path)
 
 
 @router.post("/", response_model=AmplifiedDirectory, status_code=201)
@@ -60,7 +62,7 @@ async def create_amplified_directory(
 async def list_amplified_directories(
     service: AmplifiedDirectoryService = Depends(get_service),
 ) -> AmplifiedDirectoryList:
-    """List all amplified directories within AMPLIFIERD_ROOT_WORKING_DIR.
+    """List all amplified directories within AMPLIFIERD_DATA_PATH.
 
     Discovers directories by walking filesystem to find .amplified markers.
 
@@ -86,7 +88,7 @@ async def get_amplified_directory(
     """Get specific amplified directory by relative path.
 
     Args:
-        relative_path: Path relative to AMPLIFIERD_ROOT_WORKING_DIR
+        relative_path: Path relative to AMPLIFIERD_DATA_PATH
         service: Injected service instance
 
     Returns:
@@ -121,7 +123,7 @@ async def update_amplified_directory(
     Merges provided metadata with existing metadata.
 
     Args:
-        relative_path: Path relative to AMPLIFIERD_ROOT_WORKING_DIR
+        relative_path: Path relative to AMPLIFIERD_DATA_PATH
         update_req: Update request with metadata changes
         service: Injected service instance
 
@@ -156,7 +158,7 @@ async def delete_amplified_directory(
     """Unregister/delete amplified directory.
 
     Args:
-        relative_path: Path relative to AMPLIFIERD_ROOT_WORKING_DIR
+        relative_path: Path relative to AMPLIFIERD_DATA_PATH
         remove_marker: If True, also delete .amplified directory from filesystem
         service: Injected service instance
 

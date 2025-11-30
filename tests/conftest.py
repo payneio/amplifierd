@@ -166,29 +166,34 @@ def session_manager(mock_storage_env: Path):
 
     Example:
         >>> def test_session_creation(session_manager):
-        ...     session = session_manager.create_session(profile="default")
+        ...     session = session_manager.create_session(session_id="test", profile_name="default")
         ...     assert session.id is not None
     """
     from amplifier_library.sessions.manager import SessionManager
 
-    return SessionManager()
+    # SessionManager expects a state directory and adds /sessions to it
+    # To match what get_state_dir() returns, we need to pass state/ subdirectory
+    state_dir = mock_storage_env / "state"
+    return SessionManager(storage_dir=state_dir)
 
 
 @pytest.fixture
 def sample_session(session_manager):
     """Create a sample session for testing.
 
-    Creates a session with default profile and some test context.
+    Creates a session with default profile.
 
     Returns:
         Session object ready for testing
 
     Example:
         >>> def test_with_session(sample_session):
-        ...     assert sample_session.profile == "default"
+        ...     assert sample_session.profile_name == "default"
         ...     assert sample_session.message_count == 0
     """
-    return session_manager.create_session(profile="default", context={"test_key": "test_value"})
+    import uuid
+
+    return session_manager.create_session(session_id=str(uuid.uuid4()), profile_name="default")
 
 
 @pytest.fixture

@@ -30,7 +30,7 @@ class TestExecutionRunner:
 
         await runner.execute(sample_session, "Hello")
 
-        transcript = state.get_transcript(sample_session.id)
+        transcript = state.get_transcript(sample_session.session_id)
         assert len(transcript) >= 1
         assert transcript[0].role == "user"
         assert transcript[0].content == "Hello"
@@ -46,7 +46,7 @@ class TestExecutionRunner:
         assert len(response) > 0
 
         # Check transcript has both messages
-        transcript = state.get_transcript(sample_session.id)
+        transcript = state.get_transcript(sample_session.session_id)
         assert len(transcript) == 2
         assert transcript[0].role == "user"
         assert transcript[1].role == "assistant"
@@ -124,7 +124,7 @@ class TestExecutionRunner:
         assert "error" in response.lower()
 
         # Should add error to transcript
-        transcript = state.get_transcript(sample_session.id)
+        transcript = state.get_transcript(sample_session.session_id)
         assert any("error" in msg.content.lower() for msg in transcript)
 
     @pytest.mark.asyncio
@@ -147,7 +147,7 @@ class TestExecutionRunner:
         await runner.execute(sample_session, "Second question")
         await runner.execute(sample_session, "Third question")
 
-        transcript = state.get_transcript(sample_session.id)
+        transcript = state.get_transcript(sample_session.session_id)
 
         # Should have 6 messages: 3 user + 3 assistant
         assert len(transcript) == 6

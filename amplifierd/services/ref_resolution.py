@@ -6,8 +6,10 @@ Resolves references (git URLs, fsspec paths, local paths) to local filesystem pa
 - local paths: Validate and return resolved path
 """
 
+import hashlib
 import logging
 import shutil
+import urllib.parse
 import uuid
 from pathlib import Path
 
@@ -251,55 +253,129 @@ class RefResolutionService:
                 f"  4. Try manual git clone: git clone {repo_url} -b {ref}"
             ) from e
 
-    def _resolve_fsspec(self, fsspec_path: str) -> Path:
-        """Resolve fsspec path to local path.
+    def _generate_cache_key(self, url: str) -> str:
+        """Generate 8-character hash from normalized URL.
 
         Args:
-            fsspec_path: Fsspec path (local, s3, http, etc.)
+            url: Any fsspec-compatible URL
 
         Returns:
-            Local path (may be cached if remote)
+            8-character hex hash of normalized URL
+        """
+        parsed = urllib.parse.urlparse(url)
 
-        Side Effects:
-            May download remote resources to cache
+        if parsed.scheme in ("", "file"):
+            normalized = str(Path(parsed.path).resolve())
+        else:
+            normalized = self._normalize_remote_url(parsed)
+
+        return hashlib.sha256(normalized.encode()).hexdigest()[:8]
+
+    def _normalize_remote_url(self, parsed: urllib.parse.ParseResult) -> str:
+        """Normalize remote URL to canonical form.
+
+        Args:
+            parsed: Parsed URL components
+
+        Returns:
+            Normalized URL string
+        """
+        scheme = parsed.scheme.lower()
+        netloc = parsed.netloc.lower()
+
+        if (scheme == "http" and netloc.endswith(":80")) or (scheme == "https" and netloc.endswith(":443")):
+            netloc = netloc.rsplit(":", 1)[0]
+
+        path = parsed.path.rstrip("/")
+
+        query = ""
+        if parsed.query:
+            params = sorted(urllib.parse.parse_qsl(parsed.query))
+            query = urllib.parse.urlencode(params)
+
+        return urllib.parse.urlunparse((scheme, netloc, path, "", query, ""))
+
+    def _extract_name_from_url(self, url: str) -> str:
+        """Extract original filename or directory name from URL.
+
+        Args:
+            url: fsspec-compatible URL
+
+        Returns:
+            Original filename or directory name, or "content" as fallback
+
+        Examples:
+            >>> _extract_name_from_url("http://site.com/agents/researcher.md")
+            'researcher.md'
+            >>> _extract_name_from_url("s3://bucket/agents/")
+            'agents'
+            >>> _extract_name_from_url("file:///data/foo.txt")
+            'foo.txt'
+        """
+        parsed = urllib.parse.urlparse(url)
+        path = Path(parsed.path.rstrip("/"))
+        return path.name if path.name else "content"
+
+    def _resolve_fsspec(self, fsspec_path: str) -> Path:
+        """Resolve fsspec URL using hash-based cache with atomic writes.
+
+        Cache miss downloads to .tmp_{name}, then atomically renames to preserve
+        original filename/directory name and prevent partial download corruption.
+
+        Args:
+            fsspec_path: Any fsspec-compatible URL (file://, http://, s3://, etc.)
+
+        Returns:
+            Path to local cached content (file or directory) with original name preserved
+
+        Raises:
+            RuntimeError: If download fails
         """
         import fsspec
 
-        # For local paths, just return resolved path
         local_path = Path(fsspec_path)
         if local_path.exists():
             logger.info(f"Using local path: {local_path.resolve()}")
             return local_path.resolve()
 
-        # For remote paths, use fsspec
         try:
             logger.info(f"Resolving fsspec path: {fsspec_path}")
             fs, path = fsspec.core.url_to_fs(fsspec_path)
 
-            # Get filesystem protocol
-            # Check protocol instead of isinstance to avoid type checking issues
             protocol = fs.protocol if isinstance(fs.protocol, str) else fs.protocol[0]
 
-            # If local filesystem, return path
             if protocol == "file":
                 resolved = Path(path)
                 if not resolved.exists():
                     raise RefResolutionError(f"Local path does not exist: {resolved}")
                 return resolved
 
-            # If remote, cache locally
-            protocol_cache_dir = self.fsspec_cache_dir / protocol
-            protocol_cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_key = self._generate_cache_key(fsspec_path)
+            cache_dir = self.fsspec_cache_dir / cache_key
+            original_name = self._extract_name_from_url(fsspec_path)
+            final_path = cache_dir / original_name
+            temp_path = cache_dir / f".tmp_{original_name}"
 
-            # Download/sync to cache
-            local_path = protocol_cache_dir / Path(path).name
-            logger.info(f"Downloading {fsspec_path} to {local_path}")
-            fs.get(path, str(local_path), recursive=True)
+            if final_path.exists():
+                logger.debug(f"Cache hit for {fsspec_path} → {final_path}")
+                return final_path
 
-            if not local_path.exists():
-                raise RefResolutionError(f"Failed to download from {fsspec_path}")
+            logger.debug(f"Cache miss for {fsspec_path}, downloading to {final_path}")
+            cache_dir.mkdir(parents=True, exist_ok=True)
 
-            return local_path
+            try:
+                if fs.isdir(path):
+                    fs.get(path, str(temp_path), recursive=True)
+                else:
+                    fs.get_file(path, str(temp_path))
+
+                temp_path.rename(final_path)
+                logger.debug(f"Downloaded {fsspec_path} → {final_path}")
+                return final_path
+
+            except Exception:
+                shutil.rmtree(temp_path, ignore_errors=True)
+                raise
 
         except Exception as e:
             raise RefResolutionError(

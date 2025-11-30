@@ -23,13 +23,13 @@ class AmplifiedDirectoryService:
     Security-critical: All paths are validated to prevent directory traversal.
     """
 
-    def __init__(self, root_working_dir: Path) -> None:
+    def __init__(self, data_path: Path) -> None:
         """Initialize with root working directory.
 
         Args:
-            root_working_dir: Root directory (AMPLIFIERD_ROOT_WORKING_DIR)
+            data_path: Root directory (AMPLIFIERD_DATA_PATH)
         """
-        self.root = Path(root_working_dir).resolve()
+        self.root = Path(data_path).resolve()
 
     def _resolve_default_profile(self, relative_path: str, provided_profile: str | None) -> str:
         """Resolve default profile for directory.

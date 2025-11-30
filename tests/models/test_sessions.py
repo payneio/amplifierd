@@ -6,12 +6,12 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from amplifierd.models.sessions import SessionIndex
-from amplifierd.models.sessions import SessionIndexEntry
-from amplifierd.models.sessions import SessionMessage
-from amplifierd.models.sessions import SessionMetadata
-from amplifierd.models.sessions import SessionQuery
-from amplifierd.models.sessions import SessionStatus
+from amplifier_library.models.sessions import SessionIndex
+from amplifier_library.models.sessions import SessionIndexEntry
+from amplifier_library.models.sessions import SessionMessage
+from amplifier_library.models.sessions import SessionMetadata
+from amplifier_library.models.sessions import SessionQuery
+from amplifier_library.models.sessions import SessionStatus
 
 
 class TestSessionStatus:

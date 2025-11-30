@@ -1,25 +1,24 @@
-"""Session management for amplifier_library.
+"""Session management for amplifier library."""
 
-This module provides session lifecycle management including:
-- Creating new sessions with unique IDs
-- Resuming existing sessions from storage
-- Managing session state and transcripts
-- Listing and deleting sessions
-
-Contract:
-- Inputs: Profile names, session IDs, user messages
-- Outputs: Session objects, session info, transcripts
-- Side Effects: Persists sessions to JSON storage
-"""
+from amplifier_library.models.sessions import Session
+from amplifier_library.models.sessions import SessionIndex
+from amplifier_library.models.sessions import SessionIndexEntry
+from amplifier_library.models.sessions import SessionMessage
+from amplifier_library.models.sessions import SessionMetadata
+from amplifier_library.models.sessions import SessionStatus
 
 from .manager import SessionManager
-from .state import add_message
-from .state import get_transcript
-from .state import update_context
+
+# Alias for backward compatibility with amplifierd
+SessionStateService = SessionManager
 
 __all__ = [
     "SessionManager",
-    "add_message",
-    "get_transcript",
-    "update_context",
+    "SessionStateService",
+    "Session",
+    "SessionMetadata",
+    "SessionMessage",
+    "SessionStatus",
+    "SessionIndex",
+    "SessionIndexEntry",
 ]

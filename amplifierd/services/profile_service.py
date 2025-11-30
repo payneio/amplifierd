@@ -514,36 +514,6 @@ class ProfileService:
             logger.error(f"Error writing active profile file: {e}")
             raise
 
-    def sync_profile_modules(self, profile_name: str) -> dict[str, str]:
-        """Sync modules for a profile.
-
-        Resolves and caches all module dependencies from the profile's sources.
-
-        Args:
-            profile_name: Profile name
-
-        Returns:
-            Dictionary mapping module_id to status ("resolved", "cached", "error")
-
-        Raises:
-            FileNotFoundError: If profile not found
-        """
-        from .module_resolver_service import get_module_resolver_service
-
-        profile_file = self._find_profile_file(profile_name)
-        source = self._get_profile_source(profile_file)
-        collection_name = _get_collection_from_source(source)
-
-        if not collection_name:
-            logger.warning(f"Profile {profile_name} not from a collection, no modules to sync")
-            return {}
-
-        resolver = get_module_resolver_service()
-        results = resolver.resolve_module_dependencies(profile_file, collection_name)
-
-        logger.info(f"Synced {len(results)} modules for profile {profile_name}")
-        return results
-
     def compile_and_activate_profile(self, collection_id: str, profile_name: str) -> Path:
         """Compile profile and activate it (schema v2 profiles only).
 

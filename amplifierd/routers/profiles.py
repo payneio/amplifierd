@@ -252,34 +252,6 @@ async def activate_profile(
         raise HTTPException(status_code=500, detail=f"Failed to activate profile: {str(exc)}") from exc
 
 
-@router.post("/{name}/sync-modules", status_code=200)
-async def sync_profile_modules(
-    name: str,
-    service: Annotated[ProfileService, Depends(get_profile_service)],
-) -> dict[str, dict[str, str]]:
-    """Sync modules for a profile.
-
-    Resolves and caches all module dependencies declared in the profile with sources.
-
-    Args:
-        name: Profile name
-        service: Profile service instance
-
-    Returns:
-        Sync results mapping module_id to status
-
-    Raises:
-        HTTPException: 404 if profile not found, 500 for other errors
-    """
-    try:
-        results = service.sync_profile_modules(name)
-        return {"results": results}
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to sync modules: {str(exc)}") from exc
-
-
 @router.post("/{collection_id}/{profile_name}/compile", status_code=200)
 async def compile_profile(
     collection_id: str,

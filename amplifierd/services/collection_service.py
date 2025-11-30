@@ -314,23 +314,6 @@ class CollectionService:
         self._remove_resources(identifier)
         logger.info(f"Successfully unmounted collection {identifier}")
 
-    def _resolve_profile_dependencies(self, profiles: list[str], collection: str) -> None:
-        """Resolve module dependencies for all profiles.
-
-        Args:
-            profiles: List of profile paths relative to share_dir
-            collection: Collection name for module namespace
-        """
-        from .module_resolver_service import get_module_resolver_service
-
-        resolver = get_module_resolver_service()
-        for profile_rel_path in profiles:
-            profile_path = self.share_dir / profile_rel_path
-            try:
-                resolver.resolve_module_dependencies(profile_path, collection)
-            except Exception as e:
-                logger.warning(f"Failed to resolve dependencies for profile {profile_rel_path}: {e}")
-
     def _remove_resources(self, identifier: str) -> None:
         """Remove extracted resources for a collection.
 

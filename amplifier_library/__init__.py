@@ -15,14 +15,10 @@ Public Interface:
 """
 
 # Re-export key types for convenience
-from .models import Message
-from .models import Profile
 from .models import Session
-from .models import SessionInfo
+from .models import SessionMetadata
 
 __all__ = [
     "Session",
-    "SessionInfo",
-    "Message",
-    "Profile",
+    "SessionMetadata",
 ]

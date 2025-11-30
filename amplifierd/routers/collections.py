@@ -116,7 +116,7 @@ async def sync_collections(
         sync_modules: Whether to sync modules for profiles in synced collections
 
     Returns:
-        Sync status for each collection and module sync results
+        Sync status for each collection
 
     Raises:
         HTTPException: 500 for sync errors
@@ -128,30 +128,7 @@ async def sync_collections(
             force_compile=force_compile,
         )
 
-        module_results = {}
-        if sync_modules:
-            from ..services.profile_service import ProfileService
-
-            share_dir = get_share_dir()
-            data_dir = get_share_dir()
-            profile_service = ProfileService(share_dir=share_dir, data_dir=data_dir)
-
-            for collection_name, status in results.items():
-                if status in ["synced", "updated"]:
-                    profiles = profile_service.list_profiles()
-                    collection_profiles = [
-                        p.name for p in profiles if p.source.startswith(f"{collection_name}/profiles/")
-                    ]
-
-                    for profile_name in collection_profiles:
-                        try:
-                            profile_module_results = profile_service.sync_profile_modules(profile_name)
-                            if profile_module_results:
-                                module_results[f"{collection_name}/{profile_name}"] = profile_module_results
-                        except Exception as e:
-                            module_results[f"{collection_name}/{profile_name}"] = {"error": str(e)}
-
-        return {"collections": results, "modules": module_results}
+        return {"collections": results}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
 

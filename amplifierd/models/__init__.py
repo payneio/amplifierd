@@ -3,6 +3,13 @@
 This module defines request and response models for the REST API.
 """
 
+from amplifier_library.models.sessions import SessionIndex
+from amplifier_library.models.sessions import SessionIndexEntry
+from amplifier_library.models.sessions import SessionMessage
+from amplifier_library.models.sessions import SessionMetadata
+from amplifier_library.models.sessions import SessionQuery
+from amplifier_library.models.sessions import SessionStatus
+
 from .collections import CollectionInfo
 from .collections import ProfileManifest
 from .errors import ErrorResponse
@@ -27,12 +34,6 @@ from .responses import SessionInfoResponse
 from .responses import SessionResponse
 from .responses import StatusResponse
 from .responses import TranscriptResponse
-from .sessions import SessionIndex
-from .sessions import SessionIndexEntry
-from .sessions import SessionMessage
-from .sessions import SessionMetadata
-from .sessions import SessionQuery
-from .sessions import SessionStatus
 
 __all__ = [
     "CreateSessionRequest",

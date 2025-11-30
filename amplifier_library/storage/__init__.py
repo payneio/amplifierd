@@ -15,11 +15,6 @@ Public Interface:
     - get_log_dir: Get log directory
 """
 
-from .json_store import delete_stored
-from .json_store import exists
-from .json_store import list_stored
-from .json_store import load_json
-from .json_store import save_json
 from .paths import get_config_dir
 from .paths import get_home_dir
 from .paths import get_log_dir
@@ -27,11 +22,6 @@ from .paths import get_share_dir
 from .paths import get_state_dir
 
 __all__ = [
-    "save_json",
-    "load_json",
-    "list_stored",
-    "delete_stored",
-    "exists",
     "get_home_dir",
     "get_config_dir",
     "get_share_dir",

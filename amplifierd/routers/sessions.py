@@ -16,16 +16,15 @@ from fastapi import Body
 from fastapi import Depends
 from fastapi import HTTPException
 
+from amplifier_library.models.sessions import SessionMessage
+from amplifier_library.models.sessions import SessionMetadata
+from amplifier_library.models.sessions import SessionStatus
+from amplifier_library.sessions.manager import SessionManager as SessionStateService
 from amplifier_library.storage import get_state_dir
-from amplifier_library.storage.paths import get_root_working_dir
 
 from ..models.mount_plans import MountPlan
-from ..models.sessions import SessionMessage
-from ..models.sessions import SessionMetadata
-from ..models.sessions import SessionStatus
 from ..services.amplified_directory_service import AmplifiedDirectoryService
 from ..services.mount_plan_service import MountPlanService
-from ..services.session_state_service import SessionStateService
 from .mount_plans import get_mount_plan_service
 
 logger = logging.getLogger(__name__)
@@ -40,7 +39,7 @@ def get_session_state_service() -> SessionStateService:
         SessionStateService instance configured with state directory
     """
     state_dir = get_state_dir()
-    return SessionStateService(state_dir=state_dir)
+    return SessionStateService(storage_dir=state_dir)
 
 
 # --- Lifecycle Endpoints ---
@@ -90,9 +89,16 @@ async def create_session(
         ```
     """
     try:
+        # Get data root from daemon config
+        from pathlib import Path
+
+        from amplifier_library.config.loader import load_config
+
+        config = load_config()
+        data_path = Path(config.data_path)
+
         # Validate amplified directory exists
-        root_dir = get_root_working_dir()
-        amplified_service = AmplifiedDirectoryService(root_dir)
+        amplified_service = AmplifiedDirectoryService(data_path)
 
         amplified_directory = amplified_service.get(amplified_dir)
         if not amplified_directory:
@@ -118,6 +124,18 @@ async def create_session(
         import uuid
 
         session_id = f"session_{uuid.uuid4().hex[:8]}"
+
+        # Add session metadata to mount plan settings
+        if "session" not in mount_plan:
+            mount_plan["session"] = {}
+        if "settings" not in mount_plan["session"]:
+            mount_plan["session"]["settings"] = {}
+
+        # Resolve absolute paths for session metadata
+        absolute_amplified_dir = str((Path(data_path) / amplified_dir).resolve())
+
+        mount_plan["session"]["settings"]["amplified_dir"] = absolute_amplified_dir
+        mount_plan["session"]["settings"]["session_cwd"] = absolute_amplified_dir  # Starts same
 
         # Create session with mount plan
         metadata = session_service.create_session(

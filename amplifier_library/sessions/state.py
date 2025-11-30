@@ -1,179 +1,95 @@
-"""Session state management functions.
+"""Compatibility layer for session state operations.
 
-Handles adding messages, updating context, and retrieving transcripts.
-
-Contract:
-- Inputs: Session objects, messages, context updates
-- Outputs: Message objects, updated sessions, transcripts
-- Side Effects: Persists transcript to JSON storage via json_store
+This module provides backward-compatible functions that wrap SessionStateService.
 """
 
-import logging
-from datetime import UTC
-from datetime import datetime
-from typing import Any
+from amplifier_library.models.sessions import Session
+from amplifier_library.models.sessions import SessionMessage
+from amplifier_library.storage.paths import get_state_dir
 
-from ..models import Message
-from ..models import Session
-from ..storage.json_store import exists
-from ..storage.json_store import load_json
-from ..storage.json_store import save_json
+from .manager import SessionManager as SessionStateService
 
-logger = logging.getLogger(__name__)
+
+def _get_service() -> SessionStateService:
+    """Get SessionStateService instance.
+
+    Returns:
+        SessionStateService configured with state directory
+    """
+    return SessionStateService(storage_dir=get_state_dir())
 
 
 def add_message(
     session: Session,
     role: str,
     content: str,
-    metadata: dict[str, Any] | None = None,
-) -> Message:
+    agent: str | None = None,
+    token_count: int | None = None,
+) -> SessionMessage:
     """Add a message to session transcript.
 
-    Updates the session's message count and saves the transcript.
-
     Args:
-        session: Session to add message to
-        role: Message role (user, assistant, system)
+        session: Session object
+        role: Message role ("user" | "assistant" | "system")
         content: Message content
-        metadata: Optional message metadata
+        agent: Optional agent identifier
+        token_count: Optional token count
 
     Returns:
-        New Message object
+        Created SessionMessage
 
-    Example:
-        >>> from amplifier_library.sessions import SessionManager
-        >>> manager = SessionManager()
-        >>> session = manager.create_session("default")
-        >>> msg = add_message(session, "user", "Hello")
-        >>> assert msg.role == "user"
-        >>> assert session.message_count == 1
+    Side Effects:
+        Appends message to transcript.jsonl
+        Updates message_count in session.json
     """
-    # Create message
-    message = Message(
+    service = _get_service()
+    service.append_message(
+        session_id=session.session_id,
         role=role,
         content=content,
-        timestamp=datetime.now(UTC),
-        metadata=metadata or {},
+        agent=agent,
+        token_count=token_count,
     )
 
-    # Load existing transcript
-    transcript = _load_transcript(session.id)
+    # Return a SessionMessage for backward compatibility
+    from datetime import UTC
+    from datetime import datetime
 
-    # Add message
-    transcript.append(message)
-
-    # Save transcript
-    _save_transcript(session.id, transcript)
-
-    # Update session message count
-    session.message_count = len(transcript)
-
-    logger.debug(f"Added {role} message to session {session.id}")
-
-    return message
+    return SessionMessage(
+        timestamp=datetime.now(UTC),
+        role=role,
+        content=content,
+        agent=agent,
+        token_count=token_count,
+    )
 
 
-def update_context(session: Session, context_updates: dict[str, Any]) -> None:
-    """Update session context.
-
-    Merges context_updates into session.context.
-
-    Args:
-        session: Session to update
-        context_updates: Dictionary of context updates to merge
-
-    Example:
-        >>> from amplifier_library.sessions import SessionManager
-        >>> manager = SessionManager()
-        >>> session = manager.create_session("default")
-        >>> update_context(session, {"key": "value"})
-        >>> assert session.context["key"] == "value"
-    """
-    session.context.update(context_updates)
-    logger.debug(f"Updated context for session {session.id}")
-
-
-def get_transcript(session_id: str) -> list[Message]:
+def get_transcript(session_id: str) -> list[SessionMessage]:
     """Get session transcript.
 
     Args:
-        session_id: Session ID
+        session_id: Session identifier
 
     Returns:
-        List of Message objects
+        List of SessionMessage objects
 
     Raises:
         FileNotFoundError: If session doesn't exist
-
-    Example:
-        >>> from amplifier_library.sessions import SessionManager
-        >>> manager = SessionManager()
-        >>> session = manager.create_session("default")
-        >>> add_message(session, "user", "Hello")
-        >>> transcript = get_transcript(session.id)
-        >>> assert len(transcript) == 1
     """
-    if not exists(session_id, category="sessions"):
-        raise FileNotFoundError(f"Session '{session_id}' not found")
-
-    return _load_transcript(session_id)
+    service = _get_service()
+    return service.get_transcript(session_id)
 
 
-def _load_transcript(session_id: str) -> list[Message]:
-    """Load transcript from storage.
+def update_context(session: Session, updates: dict) -> None:
+    """Update session context (deprecated - contexts removed from new model).
 
     Args:
-        session_id: Session ID
+        session: Session object
+        updates: Context updates (ignored in new model)
 
-    Returns:
-        List of Message objects (empty if transcript doesn't exist)
+    Note:
+        This function is a no-op for backward compatibility.
+        The new SessionMetadata model doesn't have a context field.
     """
-    transcript_key = f"{session_id}_transcript"
-
-    if not exists(transcript_key, category="sessions"):
-        return []
-
-    try:
-        data = load_json(transcript_key, category="sessions")
-        messages = data.get("messages", [])
-
-        # Convert dicts back to Message objects
-        return [
-            Message(
-                role=msg["role"],
-                content=msg["content"],
-                timestamp=datetime.fromisoformat(msg["timestamp"]),
-                metadata=msg.get("metadata", {}),
-            )
-            for msg in messages
-        ]
-    except Exception as e:
-        logger.warning(f"Failed to load transcript for {session_id}: {e}")
-        return []
-
-
-def _save_transcript(session_id: str, transcript: list[Message]) -> None:
-    """Save transcript to storage.
-
-    Args:
-        session_id: Session ID
-        transcript: List of Message objects
-    """
-    transcript_key = f"{session_id}_transcript"
-
-    # Convert Message objects to dicts
-    messages = [
-        {
-            "role": msg.role,
-            "content": msg.content,
-            "timestamp": msg.timestamp.isoformat(),
-            "metadata": msg.metadata,
-        }
-        for msg in transcript
-    ]
-
-    data = {"messages": messages}
-
-    save_json(transcript_key, data, category="sessions")
-    logger.debug(f"Saved transcript for session {session_id} ({len(messages)} messages)")
+    # No-op: contexts don't exist in new model
+    return  # Explicit no-op for backward compatibility

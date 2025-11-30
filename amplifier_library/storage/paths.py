@@ -150,14 +150,3 @@ def get_compiled_profiles_dir() -> Path:
     compiled_dir = get_share_dir() / "profiles"
     compiled_dir.mkdir(parents=True, exist_ok=True)
     return compiled_dir
-
-
-def get_root_working_dir() -> Path:
-    """Get root working directory
-    Returns:
-        Path to root working directory (default: ~)
-    """
-    root = os.environ.get("AMPLIFIERD_ROOT_WORKING_DIR")
-    if root is None:
-        return Path.home().resolve()
-    return Path(root).resolve()

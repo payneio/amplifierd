@@ -24,7 +24,7 @@ class DaemonSettings(BaseSettings):
         port: Listen port (default: 8420)
         log_level: Logging level (default: info)
         workers: Number of workers (default: 1)
-        root_working_dir: Root directory for data (default: /data)
+        data_path: Root directory for data (default: /data)
 
     Example:
         >>> settings = DaemonSettings()
@@ -45,7 +45,7 @@ class DaemonSettings(BaseSettings):
     log_level: str = "info"
     workers: int = 1
 
-    root_working_dir: str = "/data"
+    data_path: str = "/data"
 
     # Collection sync behavior on startup
     force_collection_refresh_on_start: bool = False

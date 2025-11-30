@@ -102,6 +102,11 @@ async def test_mount_plan_service_integration():
     # Create service
     share_dir = Path(".amplifierd/share")
 
+    # Skip if profile cache doesn't exist
+    profile_dir = share_dir / "profiles" / "foundation" / "base"
+    if not profile_dir.exists():
+        pytest.skip("foundation/base profile not compiled - run collection sync first")
+
     service = MountPlanService(share_dir=share_dir)
 
     # Generate mount plan for foundation/base profile

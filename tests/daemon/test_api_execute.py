@@ -22,9 +22,9 @@ from amplifierd.main import app
 from amplifierd.models.mount_plans import EmbeddedMount
 from amplifierd.models.mount_plans import MountPlan
 from amplifierd.models.mount_plans import SessionConfig
-from amplifierd.models.sessions import SessionMessage
-from amplifierd.models.sessions import SessionMetadata
-from amplifierd.models.sessions import SessionStatus
+from amplifier_library.models.sessions import SessionMessage
+from amplifier_library.models.sessions import SessionMetadata
+from amplifier_library.models.sessions import SessionStatus
 from amplifierd.routers.mount_plans import get_mount_plan_service
 from amplifierd.routers.sessions import get_session_state_service
 
@@ -114,7 +114,7 @@ def mock_mount_plan_service(mock_mount_plan: MountPlan) -> Mock:
         Mock service
     """
     service = Mock()
-    service.generate_mount_plan = AsyncMock(return_value=mock_mount_plan)
+    service.generate_mount_plan = Mock(return_value=mock_mount_plan.model_dump())
     return service
 
 
@@ -190,15 +190,38 @@ def patch_execution_runner(mock_execution_runner):
 
 
 @pytest.fixture
+def mock_amplified_directory_service(monkeypatch):
+    """Mock AmplifiedDirectoryService to bypass directory validation."""
+    from amplifierd.models.amplified_directories import AmplifiedDirectory
+
+    mock_directory = AmplifiedDirectory(
+        relative_path=".",
+        metadata={"default_profile": "foundation/base"},
+        created_at=datetime.now(UTC),
+    )
+
+    mock_service = Mock()
+    mock_service.get = Mock(return_value=mock_directory)
+
+    monkeypatch.setattr(
+        "amplifierd.routers.sessions.AmplifiedDirectoryService",
+        lambda data_dir: mock_service
+    )
+    yield
+
+
+@pytest.fixture
 def override_services(
     mock_mount_plan_service: Mock,
     mock_session_state_service: Mock,
+    mock_amplified_directory_service,
 ):
     """Override service dependencies with test services.
 
     Args:
         mock_mount_plan_service: Mock mount plan service
         mock_session_state_service: Mock session state service
+        mock_amplified_directory_service: Mock amplified directory service
 
     Yields:
         None

@@ -6,6 +6,7 @@ the amplifier_library via REST API with SSE streaming.
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,18 +42,16 @@ async def lifespan(app: FastAPI):
     # Startup
     config = load_config()
     logger.info(f"Starting amplifierd daemon on {config.host}:{config.port}")
-    logger.info(f"Data root: {config.root_working_dir}")
+    logger.info(f"Data root: {config.data_path}")
 
     # Auto-amplify root directory on startup
     try:
         import os
 
-        from amplifier_library.storage.paths import get_root_working_dir
-
         from .models.amplified_directories import AmplifiedDirectoryCreate
         from .services.amplified_directory_service import AmplifiedDirectoryService
 
-        root_dir = get_root_working_dir()
+        root_dir = Path(config.data_path)
         amplified_service = AmplifiedDirectoryService(root_dir)
 
         # Ensure root is amplified

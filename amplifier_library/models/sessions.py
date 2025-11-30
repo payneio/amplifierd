@@ -2,11 +2,18 @@
 
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import Any
 
 from pydantic import Field
+from pydantic import computed_field
 
-from amplifierd.models.base import CamelCaseModel
+from amplifier_library.config.loader import load_config
+from amplifier_library.models.base import CamelCaseModel
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class SessionStatus(str, Enum):
@@ -36,7 +43,12 @@ class SessionMetadata(CamelCaseModel):
 
     session_id: str = Field(description="Unique session identifier")
     parent_session_id: str | None = Field(default=None, description="Parent session ID for sub-sessions")
-    amplified_dir: str = Field(default=".", description="Relative path to amplified directory")
+    amplified_dir: str = Field(
+        default=".", description="Relative path to amplified directory (immutable anchor for .amplified/ config)"
+    )
+    session_cwd: str = Field(
+        default=".", description="Current working directory for session (mutable, starts as amplified_dir)"
+    )
     status: SessionStatus = Field(description="Current session status")
     created_at: datetime = Field(description="Session creation timestamp")
     started_at: datetime | None = Field(default=None, description="Session start timestamp (ACTIVE)")
@@ -48,6 +60,27 @@ class SessionMetadata(CamelCaseModel):
     token_usage: int | None = Field(default=None, description="Total tokens consumed")
     error_message: str | None = Field(default=None, description="Error message if status is FAILED")
     error_details: dict[str, Any] | None = Field(default=None, description="Additional error context")
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def cwd(self) -> Path:
+        """Current working directory for this session.
+
+        Resolved from session_cwd using the workspace root directory.
+        This can change during the session (e.g., via cd commands in bash).
+        Starts as amplified_dir at session creation.
+
+        Returns:
+            Absolute Path to the session's current working directory
+
+        Example:
+            session_cwd = "projects/my-project/src"
+            cwd = Path("/data/projects/my-project/src")
+        """
+
+        config = load_config()
+        data_dir = Path(config.data_path)
+        return (data_dir / self.session_cwd).resolve()
 
 
 class SessionMessage(CamelCaseModel):
@@ -102,3 +135,7 @@ class SessionQuery(CamelCaseModel):
     profile_name: str | None = Field(default=None, description="Filter by profile name")
     since: datetime | None = Field(default=None, description="Filter sessions created after this time")
     limit: int | None = Field(default=None, description="Maximum number of results to return")
+
+
+# Alias for backward compatibility
+Session = SessionMetadata

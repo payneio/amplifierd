@@ -102,7 +102,7 @@ class ExecutionRunner:
             from amplifierd.module_resolver import DaemonModuleSourceResolver
 
             # Create session (loader is created internally)
-            self._session = AmplifierSession(self.config, session_id=session.id)
+            self._session = AmplifierSession(self.config, session_id=session.session_id)
 
             # Mount resolver for module resolution
             share_dir = get_share_dir()
@@ -112,7 +112,7 @@ class ExecutionRunner:
 
             # Initialize session - loader will use resolver
             await self._session.initialize()
-            logger.info(f"Initialized AmplifierSession for {session.id}")
+            logger.info(f"Initialized AmplifierSession for {session.session_id}")
 
         # Execute and get response
         try:
@@ -165,7 +165,7 @@ class ExecutionRunner:
             from amplifierd.module_resolver import DaemonModuleSourceResolver
 
             # Create session (loader is created internally)
-            self._session = AmplifierSession(self.config, session_id=session.id)
+            self._session = AmplifierSession(self.config, session_id=session.session_id)
 
             # Mount resolver for module resolution
             share_dir = get_share_dir()
@@ -175,7 +175,7 @@ class ExecutionRunner:
 
             # Initialize session - loader will use resolver
             await self._session.initialize()
-            logger.info(f"Initialized AmplifierSession for {session.id}")
+            logger.info(f"Initialized AmplifierSession for {session.session_id}")
 
         # Get orchestrator and stream tokens
         try:
