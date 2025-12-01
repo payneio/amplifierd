@@ -374,7 +374,7 @@ class TestAmplifiedDirectoriesAPI:
         """Test that list endpoint handles unexpected errors."""
         original_list = mock_service.list_all
 
-        def failing_list():
+        def failing_list(force_refresh: bool = False):
             raise RuntimeError("List error")
 
         mock_service.list_all = failing_list
