@@ -69,29 +69,30 @@ ai_working/tmp
 *.log.jsonl
 
 # Amplifier v.1
-.claude
-.ai
-.devcontainer
-.smoke_test_data
-ai_context
-ai_working
-amplifier
-docs
-scenarios
+/.claude
+/.ai
+/.devcontainer
+/.smoke_test_data
+/ai_context
+/ai_working
+/amplifier
+/docs
+/scenarios
 /tools/
-AGENTS.md
-AMPLIFIER_VISION.md
-amplify.ps1
-amplify.sh
-CLAUDE.md
-ROADMAP.md
-.mcp.json
-DISCOVERIES.md
-DOCKER_README.md
-Dockerfile
-Makefile
-.env.example
-AMPLIFIER_README.md
+/AGENTS.md
+/AMPLIFIER_VISION.md
+/amplify.ps1
+/amplify.sh
+/CLAUDE.md
+/ROADMAP.md
+/.mcp.json
+/DISCOVERIES.md
+/DOCKER_README.md
+/Dockerfile
+/Makefile
+/.env.example
+/AMPLIFIER_README.md
+.amplifier/local/backups
 
 # related-projects
 # working
