@@ -78,7 +78,7 @@ ai_working
 amplifier
 docs
 scenarios
-tools
+/tools/
 AGENTS.md
 AMPLIFIER_VISION.md
 amplify.ps1
@@ -92,6 +92,7 @@ Dockerfile
 Makefile
 .env.example
 AMPLIFIER_README.md
+
 # related-projects
 # working
 

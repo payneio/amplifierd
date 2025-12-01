@@ -42,7 +42,7 @@ tools:
 - module: tool-web
   source: git+https://github.com/microsoft/amplifier-module-tool-web@main
 - module: tool-search
-  source: git+https://github.com/microsoft/amplifier-module-tool-search@main
+  source: git+https://github.com/payneio/amplifierd@main#subdirectory=tools/module-tool-search
 - module: tool-task
   source: git+https://github.com/microsoft/amplifier-module-tool-task@main
 - module: tool-todo
@@ -50,7 +50,7 @@ tools:
 - module: tool-web
   source: git+https://github.com/microsoft/amplifier-module-tool-web@main
 - module: tool-search
-  source: git+https://github.com/microsoft/amplifier-module-tool-search@main
+  source: git+https://github.com/payneio/amplifierd@main#subdirectory=tools/module-tool-search
 - module: tool-task
   source: git+https://github.com/microsoft/amplifier-module-tool-task@main
 hooks:
