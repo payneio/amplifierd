@@ -117,9 +117,11 @@ class StatusContextHook:
         try:
             # Get working directory - prefer session CWD from config
             session = getattr(self.coordinator, "session", None)
+            profile_name = None
             if session and hasattr(session, "config"):
                 session_settings = session.config.get("session", {}).get("settings", {})
                 session_cwd = session_settings.get("session_cwd")
+                profile_name = session_settings.get("profile_name")
                 if session_cwd:
                     working_dir = session_cwd  # Already absolute path
                 else:
@@ -153,7 +155,8 @@ class StatusContextHook:
                 "<env>\n"
                 f"Working directory: {working_dir}\n"
                 f"Is directory a git repo: {'Yes' if is_git_repo else 'No'}\n"
-                f"Platform: {platform_name}\n"
+                + (f"Active profile: {profile_name}\n" if profile_name else "")
+                + f"Platform: {platform_name}\n"
                 f"OS Version: {os_version}\n"
                 f"Today's date: {date_str}\n"
                 "</env>"
