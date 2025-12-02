@@ -55,6 +55,7 @@ export interface AmplifiedDirectory {
   relative_path: string;
   default_profile?: string;
   metadata?: Record<string, unknown>;
+  agents_content?: string;
   is_amplified: boolean;
 }
 

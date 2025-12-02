@@ -31,6 +31,7 @@ class AmplifiedDirectory(BaseModel):
     relative_path: str = Field(..., description="Path relative to AMPLIFIERD_DATA_PATH")
     default_profile: str | None = Field(None, description="Default profile for new sessions")
     metadata: dict = Field(..., description="User metadata")
+    agents_content: str | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_used_at: datetime | None = None
     path: str = Field("", description="Absolute path to directory")

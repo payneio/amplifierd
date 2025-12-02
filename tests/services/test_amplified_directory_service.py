@@ -569,3 +569,55 @@ class TestAmplifiedDirectoryService:
         with open(metadata_path) as f:
             metadata = json.load(f)
         assert metadata["test"] == "atomic"
+
+    def test_agents_content_loaded_when_present(self, service: AmplifiedDirectoryService, test_root: Path) -> None:
+        """Test that AGENTS.md content is loaded when file exists."""
+        # Create directory
+        create_req = AmplifiedDirectoryCreate(relative_path="with_agents")
+        service.create(create_req)
+
+        # Add AGENTS.md file
+        agents_path = test_root / "with_agents" / ".amplified" / "AGENTS.md"
+        agents_content = "# Test AGENTS.md\n\nThis is test content."
+        agents_path.write_text(agents_content, encoding="utf-8")
+
+        # Get directory and verify agents_content is loaded
+        result = service.get("with_agents")
+
+        assert result is not None
+        assert result.agents_content == agents_content
+
+    def test_agents_content_none_when_missing(self, service: AmplifiedDirectoryService) -> None:
+        """Test that agents_content is None when AGENTS.md doesn't exist."""
+        # Create directory without AGENTS.md
+        create_req = AmplifiedDirectoryCreate(relative_path="no_agents")
+        service.create(create_req)
+
+        # Get directory and verify agents_content is None
+        result = service.get("no_agents")
+
+        assert result is not None
+        assert result.agents_content is None
+
+    def test_agents_content_none_on_read_error(
+        self, service: AmplifiedDirectoryService, test_root: Path
+    ) -> None:
+        """Test that agents_content is None when AGENTS.md read fails."""
+        # Create directory
+        create_req = AmplifiedDirectoryCreate(relative_path="broken_agents")
+        service.create(create_req)
+
+        # Create AGENTS.md with no read permissions
+        agents_path = test_root / "broken_agents" / ".amplified" / "AGENTS.md"
+        agents_path.write_text("content", encoding="utf-8")
+        agents_path.chmod(0o000)  # No permissions
+
+        try:
+            # Get directory - should handle read error gracefully
+            result = service.get("broken_agents")
+
+            assert result is not None
+            assert result.agents_content is None  # Should be None due to read error
+        finally:
+            # Restore permissions for cleanup
+            agents_path.chmod(0o644)

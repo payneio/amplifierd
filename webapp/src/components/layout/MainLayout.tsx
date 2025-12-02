@@ -23,7 +23,7 @@ export function MainLayout() {
           backgroundPosition: 'center'
         }}
       >
-        <div className="p-4 border-b">
+        <div className="p-4">
           <h1 className="text-xl font-bold">Amplifier</h1>
         </div>
         <nav className="flex-1 p-4">

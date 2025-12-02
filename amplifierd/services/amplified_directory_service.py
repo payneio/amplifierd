@@ -184,11 +184,15 @@ class AmplifiedDirectoryService:
             # Extract default_profile from metadata for top-level field
             default_profile = metadata.get("default_profile")
 
+            # Read AGENTS.md content
+            agents_content = self._read_agents_file(dir_path)
+
             now = datetime.now(UTC)
             return AmplifiedDirectory(
                 relative_path=relative_path,
                 default_profile=default_profile,
                 metadata=metadata,
+                agents_content=agents_content,
                 created_at=now,
                 last_used_at=None,
                 path=str(dir_path),
@@ -271,11 +275,15 @@ class AmplifiedDirectoryService:
                 if "default_profile" not in metadata:
                     logger.warning(f"Amplified directory {relative_path} missing default_profile")
 
+                # Read AGENTS.md content
+                agents_content = self._read_agents_file(dir_path)
+
                 directories.append(
                     AmplifiedDirectory(
                         relative_path=relative_path,
                         default_profile=metadata.get("default_profile"),
                         metadata=metadata,
+                        agents_content=agents_content,
                         created_at=datetime.now(UTC),
                         last_used_at=None,
                         path=str(dir_path),
@@ -476,6 +484,26 @@ class AmplifiedDirectoryService:
             Path to metadata.json file
         """
         return self._get_marker_path(dir_path) / "metadata.json"
+
+    def _read_agents_file(self, dir_path: Path) -> str | None:
+        """Read AGENTS.md from .amplified directory.
+
+        Args:
+            dir_path: Absolute directory path
+
+        Returns:
+            File content as string, or None if file doesn't exist
+
+        Handles read errors gracefully (logs warning and returns None).
+        """
+        agents_path = self._get_marker_path(dir_path) / "AGENTS.md"
+        if not agents_path.exists():
+            return None
+        try:
+            return agents_path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning(f"Failed to read AGENTS.md from {agents_path}: {e}")
+            return None
 
     def _read_metadata(self, dir_path: Path) -> dict | None:
         """Read metadata from filesystem.

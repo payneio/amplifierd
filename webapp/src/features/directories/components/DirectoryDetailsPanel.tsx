@@ -103,6 +103,19 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
           </div>
         </div>
       </div>
+
+      {directory.agents_content && (
+        <div className="border rounded-lg p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            Agent Instructions
+          </h3>
+          <div className="prose prose-sm max-w-none dark:prose-invert bg-muted p-4 rounded-md overflow-auto max-h-96">
+            <pre className="whitespace-pre-wrap font-mono text-xs">
+              {directory.agents_content}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
