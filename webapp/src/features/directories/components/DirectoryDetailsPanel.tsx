@@ -81,16 +81,16 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
         <div className="border-t pt-4">
           <h3 className="text-sm font-medium text-muted-foreground mb-2">Timestamps</h3>
           <div className="space-y-2 text-sm">
-            {directory.metadata?.created_at && (
+            {directory.created_at && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Created</span>
-                <span>{formatDate(directory.metadata.created_at as string)}</span>
+                <span>{formatDate(directory.created_at)}</span>
               </div>
             )}
-            {directory.metadata?.last_used && (
+            {directory.last_used_at && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Last used</span>
-                <span>{formatDate(directory.metadata.last_used as string)}</span>
+                <span>{formatDate(directory.last_used_at)}</span>
               </div>
             )}
           </div>

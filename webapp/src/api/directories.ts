@@ -20,8 +20,11 @@ export const createDirectoryPath = (data: DirectoryCreateRequest) =>
     body: JSON.stringify(data),
   });
 
-export const getDirectory = (relativePath: string) =>
-  fetchApi<AmplifiedDirectory>(`/api/v1/amplified-directories/${relativePath}`);
+export const getDirectory = (relativePath: string) => {
+  // Special case: Use /root endpoint for root directory to avoid FastAPI routing issues
+  const path = relativePath === '.' ? 'root' : encodeURIComponent(relativePath);
+  return fetchApi<AmplifiedDirectory>(`/api/v1/amplified-directories/${path}`);
+};
 
 export const createDirectory = (data: AmplifiedDirectoryCreate) =>
   fetchApi<AmplifiedDirectory>('/api/v1/amplified-directories/', {

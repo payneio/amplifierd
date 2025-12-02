@@ -58,6 +58,35 @@ async def create_amplified_directory(
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
+@router.get("/root", response_model=AmplifiedDirectory)
+async def get_root_directory(
+    service: AmplifiedDirectoryService = Depends(get_service),
+) -> AmplifiedDirectory:
+    """Get root amplified directory (special endpoint for path '.').
+
+    FastAPI routes /amplified-directories/. to the list endpoint,
+    so we provide /amplified-directories/root as an explicit route.
+
+    Returns:
+        Root amplified directory with metadata and agents_content
+
+    Raises:
+        404: Root directory not amplified
+    """
+    try:
+        directory = service.get(".")
+
+        if not directory:
+            raise HTTPException(status_code=404, detail="Root directory not amplified")
+
+        return directory
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get root directory: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
 @router.get("/", response_model=AmplifiedDirectoryList)
 async def list_amplified_directories(
     service: AmplifiedDirectoryService = Depends(get_service),
