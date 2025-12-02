@@ -10,6 +10,7 @@ workers: 1
 
 data_path: "/data"
 
-force_collection_refresh_on_start: False
-auto_profile_build_on_start: True
-force_profile_rebuild_on_start: False
+
+startup:
+    check_cache_on_startup: true
+    update_stale_caches: true

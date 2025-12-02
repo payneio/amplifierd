@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from amplifier_library.config.loader import load_config
 
 from .routers import amplified_directories_router
+from .routers import cache_router
 from .routers import collections_router
 from .routers import directories_router
 from .routers import messages_router
@@ -80,48 +81,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to auto-amplify root directory: {e}")
         # Don't fail startup, just log the error
 
-    # Sync collections on startup with automatic profile discovery
+    # Handle cache updates based on startup configuration
     try:
-        from amplifier_library.config.settings import DaemonSettings
-        from amplifier_library.storage import get_share_dir
-        from amplifier_library.storage import get_state_dir
-        from amplifier_library.storage.paths import get_profiles_dir
+        from .config.loader import load_config as load_daemon_config
+        from .startup import handle_startup_updates
 
-        from .services.collection_service import CollectionService
-        from .services.profile_compilation import ProfileCompilationService
-        from .services.profile_discovery import ProfileDiscoveryService
-        from .services.ref_resolution import RefResolutionService
-
-        share_dir = get_share_dir()
-        state_dir = get_state_dir()
-        settings = DaemonSettings()
-
-        profiles_dir = get_profiles_dir()
-        discovery_service = ProfileDiscoveryService(cache_dir=profiles_dir)
-
-        ref_resolution = RefResolutionService(state_dir=state_dir)
-        compilation_service = ProfileCompilationService(
-            share_dir=share_dir,
-            ref_resolution=ref_resolution,
-        )
-
-        collection_service = CollectionService(
-            share_dir=share_dir,
-            discovery_service=discovery_service,
-            compilation_service=compilation_service,
-        )
-
-        results = collection_service.sync_collections(
-            force_refresh=settings.force_collection_refresh_on_start,
-            auto_compile=settings.auto_profile_build_on_start,
-            force_compile=settings.force_profile_rebuild_on_start,
-        )
-
-        synced_count = sum(1 for status in results.values() if status == "synced")
-        if synced_count > 0:
-            logger.info(f"Synced {synced_count} collection(s) on startup: {list(results.keys())}")
+        daemon_config = load_daemon_config()
+        await handle_startup_updates(daemon_config.startup)
     except Exception as e:
-        logger.warning(f"Collection sync on startup failed: {e}")
+        logger.error(f"Startup cache handling failed: {e}")
+        # Don't fail startup, just log the error
 
     yield
 
@@ -151,6 +120,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(amplified_directories_router)
+app.include_router(cache_router)
 app.include_router(directories_router)
 app.include_router(sessions_router)
 app.include_router(messages_router)

@@ -74,6 +74,18 @@ class SessionStreamRegistry:
         """
         return self._managers.get(session_id)
 
+    async def update_mount_plan(self: "SessionStreamRegistry", session_id: str, new_mount_plan: dict) -> None:
+        """Update mount plan for existing manager.
+
+        Args:
+            session_id: Session identifier
+            new_mount_plan: New mount plan configuration
+        """
+        manager = self.get(session_id)
+        if manager:
+            await manager.update_mount_plan(new_mount_plan)
+            logger.info(f"Updated mount plan for session {session_id}")
+
     async def cleanup_all(self: "SessionStreamRegistry") -> None:
         """Clean up all managers (for shutdown)."""
         async with self._lock:
@@ -113,7 +125,19 @@ class ExecutionRunnerRegistry:
         """
         async with self._lock:
             if session_id not in self._runners:
-                self._runners[session_id] = ExecutionRunner(config=mount_plan, session_id=session_id)
+                # Import here to avoid circular dependency
+                from amplifier_library.sessions.manager import SessionManager
+                from amplifier_library.storage.paths import get_state_dir
+
+                # Create session manager
+                state_dir = get_state_dir()
+                session_manager = SessionManager(state_dir)
+
+                self._runners[session_id] = ExecutionRunner(
+                    session_manager=session_manager,
+                    config=mount_plan,
+                    session_id=session_id,
+                )
                 logger.info(f"Created new ExecutionRunner for session {session_id}")
 
             self._last_used[session_id] = datetime.now()

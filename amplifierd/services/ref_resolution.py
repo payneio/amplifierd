@@ -16,6 +16,7 @@ from pathlib import Path
 from git import Repo
 
 from amplifier_library.storage.paths import get_cache_dir
+from amplifier_library.utils.git_url import parse_git_url
 
 logger = logging.getLogger(__name__)
 
@@ -170,21 +171,12 @@ class RefResolutionService:
             - If commit hash exists, return cached path
             - Otherwise, clone and cache
         """
-        # Parse git+ URL format: git+https://github.com/org/repo@ref#subdirectory=path
-        original_url = repo_url
-        repo_url = repo_url.removeprefix("git+")
-
-        # Extract subdirectory from URL if present
-        subdirectory = None
-        if "#subdirectory=" in repo_url:
-            repo_url, subdir_part = repo_url.split("#subdirectory=", 1)
-            subdirectory = subdir_part
-        elif "#" in repo_url:
-            repo_url, subdirectory = repo_url.split("#", 1)
-
-        # Extract ref from URL if present
-        if "@" in repo_url:
-            repo_url, ref = repo_url.rsplit("@", 1)
+        # Parse git+ URL using shared utility
+        parsed = parse_git_url(repo_url)
+        original_url = repo_url  # Save original before overwriting
+        repo_url = parsed.url
+        ref = parsed.ref
+        subdirectory = parsed.subdirectory
 
         # Create temporary directory for clone
         temp_dir = self.git_cache_dir / f"temp_{uuid.uuid4().hex[:8]}"

@@ -103,7 +103,7 @@ Discovers modules from flattened modules directory via collection-organized hier
 
 **Endpoints:** `/api/v1/modules/*`
 
-### SimpleCollectionService
+### CollectionService
 
 Manages collection lifecycle: registration, extraction, and tracking.
 

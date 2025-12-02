@@ -66,8 +66,20 @@ class SessionStreamManager:
             ExecutionRunner configured with streaming hooks
         """
         if self._runner is None:
+            # Import here to avoid circular dependency
+            from amplifier_library.sessions.manager import SessionManager
+            from amplifier_library.storage.paths import get_state_dir
+
+            # Create session manager
+            state_dir = get_state_dir()
+            session_manager = SessionManager(state_dir)
+
             # Create runner
-            self._runner = ExecutionRunner(config=self.mount_plan, session_id=self.session_id)
+            self._runner = ExecutionRunner(
+                session_manager=session_manager,
+                config=self.mount_plan,
+                session_id=self.session_id,
+            )
             self._runner_initialized = False
             logger.info(f"Created ExecutionRunner for session {self.session_id}")
 
@@ -106,6 +118,19 @@ class SessionStreamManager:
             queue: Queue to remove
         """
         self.emitter.unsubscribe(queue)
+
+    async def update_mount_plan(self: "SessionStreamManager", new_mount_plan: dict) -> None:
+        """Update mount plan and invalidate runner.
+
+        Args:
+            new_mount_plan: New mount plan configuration
+        """
+        self.mount_plan = new_mount_plan
+        if self._runner:
+            await self._runner.cleanup()
+            self._runner = None
+        self._runner_initialized = False
+        logger.info(f"Updated mount plan for session {self.session_id}")
 
     async def cleanup(self: "SessionStreamManager") -> None:
         """Clean up resources when session ends."""

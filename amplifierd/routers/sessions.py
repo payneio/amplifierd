@@ -136,6 +136,7 @@ async def create_session(
 
         mount_plan["session"]["settings"]["amplified_dir"] = absolute_amplified_dir
         mount_plan["session"]["settings"]["session_cwd"] = absolute_amplified_dir  # Starts same
+        mount_plan["session"]["settings"]["profile_name"] = profile_name
 
         # Create session with mount plan
         metadata = session_service.create_session(
@@ -712,6 +713,13 @@ async def change_session_profile(
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=f"Profile '{profile_name}' not found: {e}")
 
+        # Inject profile name into mount plan settings for AI awareness
+        if "session" not in new_mount_plan:
+            new_mount_plan["session"] = {}
+        if "settings" not in new_mount_plan["session"]:
+            new_mount_plan["session"]["settings"] = {}
+        new_mount_plan["session"]["settings"]["profile_name"] = profile_name
+
         # 3. Change profile in ExecutionRunner (blocks if execution in progress)
         from ..services.session_stream_registry import change_session_profile as do_change
 
@@ -724,7 +732,18 @@ async def change_session_profile(
             logger.error(f"Profile change failed for {session_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Profile change failed: {str(e)}")
 
-        # 4. Update session metadata
+        # 4. Persist mount plan to disk (critical for subsequent messages)
+        state_dir = get_state_dir()
+        mount_plan_path = state_dir / "sessions" / session_id / "mount_plan.json"
+
+        try:
+            mount_plan_path.write_text(json.dumps(new_mount_plan, indent=2))
+            logger.debug(f"Persisted new mount plan for {session_id} to {mount_plan_path}")
+        except Exception as e:
+            logger.error(f"Failed to persist mount plan for {session_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to persist profile change to disk: {str(e)}")
+
+        # 5. Update session metadata
         def update(meta: SessionMetadata) -> None:
             meta.profile_name = profile_name
 

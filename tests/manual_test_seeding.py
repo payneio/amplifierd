@@ -18,7 +18,7 @@ def main() -> None:
         print("Testing Collection Seeding and Sync Flow")
         print(f"{'=' * 60}\n")
 
-        print("Step 1: Initialize SimpleCollectionService")
+        print("Step 1: Initialize CollectionService")
         print(f"  Share directory: {share_dir}")
 
         service = CollectionService(share_dir)

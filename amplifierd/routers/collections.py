@@ -27,7 +27,7 @@ def get_collection_service() -> CollectionService:
     """Get collection service instance.
 
     Returns:
-        SimpleCollectionService instance with profile discovery/compilation
+        CollectionService instance with profile discovery/compilation
     """
     from amplifier_library.storage.paths import get_profiles_dir
 
@@ -52,6 +52,7 @@ def get_collection_service() -> CollectionService:
     )
 
 
+@router.get("", response_model=list[CollectionInfo])
 @router.get("/", response_model=list[CollectionInfo])
 async def list_collections(
     service: Annotated[CollectionService, Depends(get_collection_service)],
@@ -94,43 +95,22 @@ async def get_collection(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/sync")
-async def sync_collections(
-    service: Annotated[CollectionService, Depends(get_collection_service)],
-    force_refresh: bool = False,
-    auto_compile: bool = True,
-    force_compile: bool = False,
-    sync_modules: bool = True,
-) -> dict[str, dict[str, str] | dict[str, dict[str, str]]]:
-    """Sync collections declared in collections.yaml.
+@router.post("/sync", deprecated=True, status_code=410)
+async def sync_collections_deprecated() -> dict[str, str]:
+    """DEPRECATED: Use POST /api/v1/cache/update instead.
 
-    Reads collections.yaml and ensures all declared collections are installed.
-    Clones missing collections and optionally refreshes existing ones.
-    Also syncs modules for all profiles in synced collections.
-
-    Args:
-        service: Collection service instance
-        force_refresh: Whether to delete cache and re-clone existing collections
-        auto_compile: Whether to automatically compile profiles after sync
-        force_compile: Whether to force profile recompilation
-        sync_modules: Whether to sync modules for profiles in synced collections
-
-    Returns:
-        Sync status for each collection
+    This endpoint has been removed. Use the new cache management API:
+    - GET /api/v1/cache/status - Check cache status
+    - POST /api/v1/cache/update - Update all collections
+    - POST /api/v1/cache/update/collections/{id} - Update specific collection
 
     Raises:
-        HTTPException: 500 for sync errors
+        HTTPException: 410 Gone - endpoint removed
     """
-    try:
-        results = service.sync_collections(
-            force_refresh=force_refresh,
-            auto_compile=auto_compile,
-            force_compile=force_compile,
-        )
-
-        return {"collections": results}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Sync failed: {exc}") from exc
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated and has been removed. Use POST /api/v1/cache/update instead.",
+    )
 
 
 @router.post("/", status_code=201)

@@ -98,8 +98,7 @@ class CollectionService:
 
         services_str = f" (with {', '.join(services_status)})" if services_status else ""
         logger.info(
-            f"SimpleCollectionService initialized with share_dir={self.share_dir}, "
-            f"state_dir={self.state_dir}{services_str}"
+            f"CollectionService initialized with share_dir={self.share_dir}, state_dir={self.state_dir}{services_str}"
         )
 
     # Registry persistence methods
