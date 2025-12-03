@@ -57,3 +57,12 @@ export const changeProfile = (sessionId: string, profileName: string) =>
     method: 'POST',
     body: JSON.stringify({ profile_name: profileName }),
   });
+
+export const updateSession = (
+  sessionId: string,
+  updates: { name?: string }
+) =>
+  fetchApi<Session>(`/api/v1/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });

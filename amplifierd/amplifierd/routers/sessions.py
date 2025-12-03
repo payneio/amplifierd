@@ -12,16 +12,17 @@ import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter
-from fastapi import Body
-from fastapi import Depends
-from fastapi import HTTPException
-
 from amplifier_library.models.sessions import SessionMessage
 from amplifier_library.models.sessions import SessionMetadata
 from amplifier_library.models.sessions import SessionStatus
 from amplifier_library.sessions.manager import SessionManager as SessionStateService
 from amplifier_library.storage import get_state_dir
+from fastapi import APIRouter
+from fastapi import Body
+from fastapi import Depends
+from fastapi import HTTPException
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 
 from ..models.mount_plans import MountPlan
 from ..services.amplified_directory_service import AmplifiedDirectoryService
@@ -41,6 +42,15 @@ def get_session_state_service() -> SessionStateService:
     """
     state_dir = get_state_dir()
     return SessionStateService(storage_dir=state_dir)
+
+
+# --- Request/Response Models ---
+
+
+class SessionUpdateRequest(BaseModel):
+    """Request model for updating session metadata."""
+
+    name: str | None = PydanticField(None, max_length=200, description="Session name (empty string clears it)")
 
 
 # --- Lifecycle Endpoints ---
@@ -375,6 +385,53 @@ async def get_session(
     except Exception as exc:
         logger.error(f"Failed to get session {session_id}: {exc}")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
+@router.patch("/{session_id}", response_model=SessionMetadata)
+async def update_session(
+    session_id: str,
+    update: SessionUpdateRequest,
+    session_service: Annotated[SessionStateService, Depends(get_session_state_service)],
+) -> SessionMetadata:
+    """Update session metadata.
+
+    Args:
+        session_id: Session identifier
+        update: Fields to update
+        session_service: Session state service dependency
+
+    Returns:
+        Updated session metadata
+
+    Raises:
+        HTTPException: 404 if session not found
+    """
+    try:
+        # Get current session
+        current = session_service.get_session(session_id)
+        if not current:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        # Update name if provided (empty string clears it)
+        if update.name is not None:
+            trimmed = update.name.strip()
+
+            def update_name(meta: SessionMetadata) -> None:
+                meta.name = trimmed if trimmed else None
+
+            session_service._update_session(session_id, update_name)
+
+        # Return updated session
+        updated = session_service.get_session(session_id)
+        if updated is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+        return updated
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/", response_model=list[SessionMetadata])

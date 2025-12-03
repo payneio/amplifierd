@@ -42,6 +42,7 @@ class SessionMetadata(CamelCaseModel):
     """
 
     session_id: str = Field(description="Unique session identifier")
+    name: str | None = Field(default=None, description="User-defined session name (optional, max 200 chars)")
     parent_session_id: str | None = Field(default=None, description="Parent session ID for sub-sessions")
     amplified_dir: str = Field(
         default=".", description="Relative path to amplified directory (immutable anchor for .amplified/ config)"

@@ -72,7 +72,9 @@ export function SessionsList({ directoryPath }: SessionsListProps) {
                 >
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4" />
-                    <div className="font-medium">{session.sessionId}</div>
+                    <span className="font-medium">
+                      {session.name || `Session from ${new Date(session.createdAt).toLocaleDateString()}`}
+                    </span>
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
                     Profile: {session.profileName} • Status: {session.status}

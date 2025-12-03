@@ -74,6 +74,7 @@ export interface AmplifiedDirectoryCreate {
 
 export interface Session {
   sessionId: string;
+  name?: string;
   profileName: string;
   status: 'created' | 'active' | 'completed' | 'failed' | 'terminated';
   createdAt: string;

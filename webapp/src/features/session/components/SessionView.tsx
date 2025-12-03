@@ -12,6 +12,7 @@ import { ApprovalDialog } from './ApprovalDialog';
 import { MessageInput } from './MessageInput';
 import { MessageList } from './MessageList';
 import { ToolCallDisplay } from './ToolCallDisplay';
+import { SessionNameEdit } from '@/features/directories/components/SessionNameEdit';
 
 interface MessageEventData {
   role?: 'user' | 'assistant';
@@ -225,7 +226,11 @@ export function SessionView() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex-1">
-            <h1 className="text-xl font-bold">Session: {sessionId}</h1>
+            <SessionNameEdit
+              sessionId={sessionId || ''}
+              currentName={session.name}
+              createdAt={session.createdAt}
+            />
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span>Status: {session.status}</span>
               {/* Profile dropdown */}

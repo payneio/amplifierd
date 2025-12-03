@@ -147,10 +147,7 @@ export function DirectoriesPage() {
               </div>
 
               {/* Sessions Section */}
-              <div>
-                <h2 className="text-xl font-bold mb-4">Sessions</h2>
-                <SessionsList directoryPath={selectedPath} />
-              </div>
+              <SessionsList directoryPath={selectedPath} />
             </>
           ) : null}
         </div>

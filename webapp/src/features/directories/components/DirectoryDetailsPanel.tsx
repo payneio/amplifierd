@@ -1,6 +1,6 @@
 import { fetchApi } from '@/api/client';
 import type { AmplifiedDirectory } from '@/types/api';
-import { Edit, Folder, Trash2 } from 'lucide-react';
+import { Edit, Folder, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 interface DirectoryDetailsPanelProps {
@@ -14,6 +14,10 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
     if (!dateString) return 'Never';
     return new Date(dateString).toLocaleString();
   };
+
+  // State for collapsible sections
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
+  const [isAgentsExpanded, setIsAgentsExpanded] = useState(false);
 
   // State for editing agents content
   const [isEditingAgents, setIsEditingAgents] = useState(false);
@@ -100,38 +104,65 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
         </div>
       </div>
 
-      <div className="border rounded-lg p-4 space-y-4">
-        {directory.metadata?.description && (
-          <div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Description</h3>
-            <div className="text-sm">{directory.metadata.description as string}</div>
+      {directory.metadata?.description && (
+        <div className="mt-4 p-4 bg-muted/30 rounded-lg border">
+          <div className="text-sm text-muted-foreground leading-relaxed">
+            {directory.metadata.description as string}
           </div>
-        )}
+        </div>
+      )}
 
-        <div className="border-t pt-4">
-          <h3 className="text-sm font-medium text-muted-foreground mb-2">Default Profile</h3>
-          {directory.default_profile ? (
-            <div className="text-sm font-mono">{directory.default_profile}</div>
-          ) : (
-            <div className="text-sm text-muted-foreground">No default profile</div>
-          )}
+      <div className="border rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            {isMetadataExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            Project Details
+          </button>
         </div>
 
-        {directory.last_used_at && (
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">Last Used</h3>
-            <div className="text-sm">{formatDate(directory.last_used_at)}</div>
+        {isMetadataExpanded && (
+          <div className="mt-4 space-y-4">
+            <div className="">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">Default Profile</h3>
+              {directory.default_profile ? (
+                <div className="text-sm font-mono">{directory.default_profile}</div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No default profile</div>
+              )}
+            </div>
+
+            {directory.last_used_at && (
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-medium text-muted-foreground mb-2">Last Used</h3>
+                <div className="text-sm">{formatDate(directory.last_used_at)}</div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {directory.agents_content !== undefined && (
         <div className="border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-medium text-muted-foreground">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            >
+              {isAgentsExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
               Agent Instructions
-            </h3>
-            {!isEditingAgents && (
+            </button>
+            {isAgentsExpanded && !isEditingAgents && (
               <button
                 onClick={handleStartAgentsEdit}
                 className="flex items-center gap-1 px-2 py-1 text-xs border rounded-md hover:bg-accent"
@@ -141,6 +172,9 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
               </button>
             )}
           </div>
+
+          {isAgentsExpanded && (
+            <div className="mt-4">
 
           {isEditingAgents ? (
             <div className="space-y-3">
@@ -188,6 +222,8 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
               </div>
             </>
           )}
+          </div>
+        )}
         </div>
       )}
     </div>
