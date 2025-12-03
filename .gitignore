@@ -102,6 +102,7 @@ ai_working/tmp
 amplifierd/.amplifierd/state
 amplifierd/.amplifierd/cache
 amplifierd/.compilation_meta.json
+.amplified
 
 # temporary ignores during development
 amplifierd/.amplifierd/share/profiles
