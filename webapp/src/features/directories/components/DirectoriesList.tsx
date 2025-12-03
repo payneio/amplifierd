@@ -1,19 +1,51 @@
 import type { AmplifiedDirectoryCreate } from '@/types/api';
-import { Folder, Info, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { Plus } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import { useDirectories } from '../hooks/useDirectories';
 import { CreateDirectoryDialog } from './CreateDirectoryDialog';
+import { TreeNode } from './TreeNode';
+import { buildDirectoryTree } from '../utils/treeUtils';
+import type { TreeNode as TreeNodeType } from '../utils/treeUtils';
 
 interface DirectoriesListProps {
   onSelectDirectory: (path: string) => void;
-  onViewDetails: (path: string) => void;
   selectedPath?: string;
 }
 
-export function DirectoriesList({ onSelectDirectory, onViewDetails, selectedPath }: DirectoriesListProps) {
+export function DirectoriesList({ onSelectDirectory, selectedPath }: DirectoriesListProps) {
   const { directories, isLoading, createDirectory } = useDirectories();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  const tree = useMemo(() => {
+    const baseTree = buildDirectoryTree(directories);
+    // Apply expanded state to the tree
+    const applyExpansion = (nodes: TreeNodeType[]): TreeNodeType[] => {
+      return nodes.map((node) => ({
+        ...node,
+        isExpanded: expandedPaths.has(node.fullPath),
+        children: applyExpansion(node.children),
+      }));
+    };
+    return applyExpansion(baseTree);
+  }, [directories, expandedPaths]);
+
+  const handleToggle = (path: string) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const handleSelect = (path: string) => {
+    onSelectDirectory(path);
+  };
 
   const handleCreateDirectory = async (data: AmplifiedDirectoryCreate) => {
     setCreateError(null);
@@ -47,48 +79,15 @@ export function DirectoriesList({ onSelectDirectory, onViewDetails, selectedPath
           No amplified directories found
         </div>
       ) : (
-        <div className="space-y-2">
-          {directories.map((dir) => (
-            <div
-              key={dir.relative_path}
-              className={`flex items-center gap-2 p-3 rounded-md transition-colors ${
-                selectedPath === dir.relative_path
-                  ? 'bg-primary/10 text-primary border border-primary'
-                  : 'hover:bg-accent border border-transparent'
-              }`}
-            >
-              <button
-                onClick={() => onSelectDirectory(dir.relative_path)}
-                className="flex items-center gap-3 min-w-0 flex-1 text-left"
-              >
-                <Folder className="h-4 w-4 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate">
-                    {dir.metadata?.name || dir.relative_path}
-                  </div>
-                  {dir.metadata?.name && (
-                    <div className="text-xs text-muted-foreground truncate">
-                      /{dir.relative_path}
-                    </div>
-                  )}
-                  {dir.default_profile && (
-                    <div className="text-xs text-muted-foreground truncate">
-                      Default profile: {dir.default_profile}
-                    </div>
-                  )}
-                </div>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onViewDetails(dir.relative_path);
-                }}
-                className="p-2 hover:bg-accent rounded-md shrink-0"
-                title="View details"
-              >
-                <Info className="h-4 w-4" />
-              </button>
-            </div>
+        <div className="space-y-1">
+          {tree.map((node) => (
+            <TreeNode
+              key={node.fullPath}
+              node={node}
+              selectedPath={selectedPath || null}
+              onToggle={handleToggle}
+              onSelect={handleSelect}
+            />
           ))}
         </div>
       )}

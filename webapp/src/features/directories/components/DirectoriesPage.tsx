@@ -20,6 +20,7 @@ export function DirectoriesPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedDirectory, setSelectedDirectory] = useState<AmplifiedDirectory | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isFetchingDetails, setIsFetchingDetails] = useState(false);
 
   const { updateDirectory, deleteDirectory } = useDirectories();
 
@@ -31,14 +32,34 @@ export function DirectoriesPage() {
 
   // Fetch directory details when showing details
   useEffect(() => {
+    let cancelled = false;
+
     if (selectedPath && showDetails) {
-      api.getDirectory(selectedPath)
-        .then(setSelectedDirectory)
-        .catch((err) => {
-          console.error('Failed to fetch directory details:', err);
-          setShowDetails(false);
-        });
+      const fetchDetails = async () => {
+        setIsFetchingDetails(true);
+        try {
+          const directory = await api.getDirectory(selectedPath);
+          if (!cancelled) {
+            setSelectedDirectory(directory);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            console.error('Failed to fetch directory details:', err);
+            setShowDetails(false);
+          }
+        } finally {
+          if (!cancelled) {
+            setIsFetchingDetails(false);
+          }
+        }
+      };
+
+      void fetchDetails();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedPath, showDetails]);
 
   const handleSelectDirectory = (path: string) => {
@@ -46,8 +67,8 @@ export function DirectoriesPage() {
     setShowDetails(false);
   };
 
-  const handleViewDetails = (path: string) => {
-    setSearchParams({ path });
+  const handleViewDetails = () => {
+    setSelectedDirectory(null); // Clear stale data before fetching fresh details
     setShowDetails(true);
   };
 
@@ -127,33 +148,38 @@ export function DirectoriesPage() {
       <div className="grid lg:grid-cols-2 gap-8">
         <DirectoriesList
           onSelectDirectory={handleSelectDirectory}
-          onViewDetails={handleViewDetails}
           selectedPath={selectedPath}
         />
 
         {selectedPath && (
           <div className="space-y-4">
-            {showDetails && selectedDirectory ? (
-              <>
-                <button
-                  onClick={handleBackToSessions}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Back to Sessions
-                </button>
-                <DirectoryDetailsPanel
-                  directory={selectedDirectory}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              </>
+            {showDetails ? (
+              isFetchingDetails ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="text-muted-foreground">Loading details...</div>
+                </div>
+              ) : selectedDirectory ? (
+                <>
+                  <button
+                    onClick={handleBackToSessions}
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Back to Sessions
+                  </button>
+                  <DirectoryDetailsPanel
+                    directory={selectedDirectory}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                </>
+              ) : null
             ) : (
               <>
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold">Sessions</h2>
                   <button
-                    onClick={() => setShowDetails(true)}
+                    onClick={handleViewDetails}
                     className="text-sm text-primary hover:underline"
                   >
                     View Details
