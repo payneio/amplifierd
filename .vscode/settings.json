@@ -173,5 +173,5 @@
     "Worktree"
   ],
   "makefile.configureOnOpen": false,
-  "python.testing.pytestArgs": ["tests"]
+  "python.testing.pytestArgs": ["amplifierd/tests"]
 }
