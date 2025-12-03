@@ -144,6 +144,10 @@ class RefResolutionService:
                 logger.debug(f"Resolved absolute path {source_ref} → {path}")
                 return path
 
+            # Handle HTTP(S) URLs
+            if source_ref.startswith(("https://", "http://")):
+                return self._resolve_http_url(source_ref)
+
             # Treat everything else as fsspec path
             return self._resolve_fsspec(source_ref)
 
@@ -245,6 +249,55 @@ class RefResolutionService:
                 f"  4. Try manual git clone: git clone {repo_url} -b {ref}"
             ) from e
 
+    def _resolve_http_url(self, url: str) -> Path:
+        """Download HTTP(S) URL to cache.
+
+        Args:
+            url: HTTP(S) URL to download
+
+        Returns:
+            Path to cached file
+
+        Raises:
+            RefResolutionError: If download fails
+        """
+        import fsspec
+
+        logger.info(f"Downloading URL: {url}")
+
+        try:
+            # Use fsspec to download
+            fs, path = fsspec.core.url_to_fs(url)
+
+            # Setup cache directory
+            cache_dir = self.fsspec_cache_dir / "http"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+
+            # Extract original filename from URL
+            original_name = self._extract_name_from_url(url)
+            final_path = cache_dir / original_name
+            temp_path = cache_dir / f".tmp_{original_name}"
+
+            # Return cached file if it exists
+            if final_path.exists():
+                logger.debug(f"Cache hit for {url} → {final_path}")
+                return final_path
+
+            # Download to temp path then atomically rename
+            logger.info(f"Downloading {url} to cache")
+            try:
+                fs.get_file(path, str(temp_path))
+                temp_path.rename(final_path)
+                logger.info(f"Cached to: {final_path}")
+            except Exception:
+                shutil.rmtree(temp_path, ignore_errors=True)
+                raise
+
+            return final_path
+
+        except Exception as e:
+            raise RefResolutionError(f"Failed to resolve HTTP URL '{url}': {type(e).__name__}: {e}") from e
+
     def _generate_cache_key(self, url: str) -> str:
         """Generate 8-character hash from normalized URL.
 
@@ -325,10 +378,12 @@ class RefResolutionService:
         """
         import fsspec
 
-        local_path = Path(fsspec_path)
-        if local_path.exists():
-            logger.info(f"Using local path: {local_path.resolve()}")
-            return local_path.resolve()
+        # Only check for local paths if it doesn't look like a URL
+        if not fsspec_path.startswith(("https://", "http://", "s3://", "gs://", "az://", "file://")):
+            local_path = Path(fsspec_path)
+            if local_path.exists():
+                logger.info(f"Using local path: {local_path.resolve()}")
+                return local_path.resolve()
 
         try:
             logger.info(f"Resolving fsspec path: {fsspec_path}")

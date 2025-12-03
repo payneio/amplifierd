@@ -32,7 +32,7 @@ export function ProfileDetailModal({ profileName, onClose, onEdit, onDelete }: P
 
   return (
     <Dialog open={!!profileName} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle>Profile Details</DialogTitle>
@@ -143,14 +143,17 @@ export function ProfileDetailModal({ profileName, onClose, onEdit, onDelete }: P
               </div>
             )}
 
-            {profile.agents && profile.agents.length > 0 && (
+            {profile.agents && Object.keys(profile.agents).length > 0 && (
               <div>
-                <h4 className="font-semibold mb-2">Agents ({profile.agents.length})</h4>
-                <ul className="list-disc list-inside space-y-1">
-                  {profile.agents.map((agent, i) => (
-                    <li key={i} className="text-sm font-mono">{agent}</li>
+                <h4 className="font-semibold mb-2">Agents ({Object.keys(profile.agents).length})</h4>
+                <div className="space-y-2">
+                  {Object.entries(profile.agents).map(([name, ref]) => (
+                    <div key={name} className="border rounded-lg p-3 bg-muted/50">
+                      <div className="font-mono text-sm font-semibold">{name}</div>
+                      <div className="text-xs text-muted-foreground mt-1 break-all">{ref}</div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             )}
 

@@ -1,6 +1,7 @@
 """Directory browsing API endpoints."""
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -19,8 +20,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/directories", tags=["directories"])
 
 
+@lru_cache(maxsize=1)
 def get_service() -> AmplifiedDirectoryService:
-    """Get amplified directory service instance."""
+    """Get amplified directory service singleton instance."""
     config = load_config()
     data_path = Path(config.data_path)
     return AmplifiedDirectoryService(data_path)

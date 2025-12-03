@@ -33,7 +33,7 @@ def simple_profile() -> ProfileDetails:
         description="Test profile for change detection",
         source="test",
         is_active=True,
-        agents=[],
+        agents={},
         context={},
         tools=[],
         hooks=[],

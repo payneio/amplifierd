@@ -194,3 +194,52 @@ class TestDaemonSettings:
         assert settings.port == 9000
         assert settings.log_level == "debug"
         assert settings.workers == 2
+
+
+@pytest.mark.unit
+class TestDaemonSettingsPathExpansion:
+    """Test DaemonSettings path expansion validator."""
+
+    def test_data_path_absolute_unchanged(self) -> None:
+        """Absolute paths should remain unchanged."""
+        settings = DaemonSettings(data_path="/absolute/path")
+        assert settings.data_path == "/absolute/path"
+
+    def test_data_path_tilde_expansion(self) -> None:
+        """Tilde should expand to user home directory."""
+        settings = DaemonSettings(data_path="~")
+        expected = str(Path.home())
+        assert settings.data_path == expected
+
+    def test_data_path_tilde_with_subdir(self) -> None:
+        """Tilde with subdirectory should expand correctly."""
+        settings = DaemonSettings(data_path="~/amplifier")
+        expected = str(Path.home() / "amplifier")
+        assert settings.data_path == expected
+
+    def test_data_path_relative_resolution(self, tmp_path: Path) -> None:
+        """Relative paths should resolve to absolute paths."""
+        import os
+
+        # Change to temp directory for deterministic test
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(tmp_path)
+            settings = DaemonSettings(data_path="./data")
+            expected = str(tmp_path / "data")
+            assert settings.data_path == expected
+        finally:
+            os.chdir(original_cwd)
+
+    def test_data_path_env_override_with_tilde(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Environment variable with tilde should expand."""
+        monkeypatch.setenv("AMPLIFIERD_DATA_PATH", "~/custom")
+        settings = DaemonSettings()
+        expected = str(Path.home() / "custom")
+        assert settings.data_path == expected
+
+    def test_data_path_default_is_absolute(self) -> None:
+        """Default data_path should be absolute."""
+        settings = DaemonSettings()
+        # Default is "/data" which is already absolute
+        assert settings.data_path.startswith("/")

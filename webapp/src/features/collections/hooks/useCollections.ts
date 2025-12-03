@@ -85,12 +85,25 @@ export function useUpdateProfile() {
   });
 }
 
+export function useCopyProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ sourceName, newName }: { sourceName: string; newName: string }) =>
+      api.copyProfile(sourceName, newName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    },
+  });
+}
+
 export function useMountCollection() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: api.mountCollection,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cache', 'status'] });
       queryClient.invalidateQueries({ queryKey: ['collections'] });
     },
   });
@@ -105,4 +118,17 @@ export function useUnmountCollection() {
       queryClient.invalidateQueries({ queryKey: ['collections'] });
     },
   });
+}
+
+export function useComponentRefs() {
+  const componentRefs = useQuery({
+    queryKey: ['componentRefs'],
+    queryFn: api.getComponentRefs,
+  });
+
+  return {
+    componentRefs: componentRefs.data,
+    isLoading: componentRefs.isLoading,
+    error: componentRefs.error,
+  };
 }

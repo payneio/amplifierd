@@ -47,39 +47,23 @@ export function HomePage() {
       <h1 className="text-3xl font-bold mb-4">Welcome to Amplifier</h1>
 
       <div className="border rounded-lg p-4 bg-muted/50">
-        <h2 className="text-lg font-semibold mb-2">Connection Info</h2>
+        <h2 className="text-lg font-semibold mb-2">API Connection Info</h2>
         <div className="space-y-2">
-          <div className="space-y-1 text-sm">
-            <h3 className="font-medium">Frontend (This Page)</h3>
-            <div>
-              <span className="text-muted-foreground">URL: </span>
-              <span className="font-mono">{typeof window !== 'undefined' ? window.location.href : ''}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Port: </span>
-              <span className="font-mono">{typeof window !== 'undefined' ? window.location.port : ''}</span>
-            </div>
-          </div>
           <div className="border-t pt-2 space-y-1 text-sm">
-            <h3 className="font-medium">API Backend</h3>
-            <div>
-              <span className="text-muted-foreground">Configured Endpoint: </span>
-              <span className="font-mono">{BASE_URL}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Env Variable: </span>
-              <span className="font-mono">{import.meta.env.VITE_API_URL || 'not set'}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Status: </span>
-              <span className={getStatusColor()}>{getStatusText()}</span>
-            </div>
             {apiVersion && (
               <div>
                 <span className="text-muted-foreground">Version: </span>
                 <span>{apiVersion}</span>
               </div>
             )}
+            <div>
+              <span className="text-muted-foreground">Endpoint: </span>
+              <span className="font-mono">{BASE_URL}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Status: </span>
+              <span className={getStatusColor()}>{getStatusText()}</span>
+            </div>
             {dataPath && (
               <div>
                 <span className="text-muted-foreground">Data Path: </span>

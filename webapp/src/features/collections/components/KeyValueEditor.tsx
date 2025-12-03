@@ -1,4 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react';
+import type { ComponentRef } from '@/types/api';
+import { ComponentSelector } from './ComponentSelector';
 
 interface KeyValuePair {
   key: string;
@@ -11,6 +13,11 @@ interface KeyValueEditorProps {
   onChange: (items: KeyValuePair[]) => void;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
+  components?: ComponentRef[];
+  showSelector?: boolean;
+  onShowSelector?: () => void;
+  onHideSelector?: () => void;
+  loadingRefs?: boolean;
 }
 
 export function KeyValueEditor({
@@ -19,9 +26,17 @@ export function KeyValueEditor({
   onChange,
   keyPlaceholder = 'key',
   valuePlaceholder = 'value',
+  components,
+  showSelector = false,
+  onShowSelector,
+  onHideSelector,
+  loadingRefs = false,
 }: KeyValueEditorProps) {
-  const addItem = () => {
-    onChange([...items, { key: '', value: '' }]);
+  const addItem = (uri?: string) => {
+    onChange([...items, { key: '', value: uri || '' }]);
+    if (onHideSelector) {
+      onHideSelector();
+    }
   };
 
   const removeItem = (index: number) => {
@@ -38,14 +53,35 @@ export function KeyValueEditor({
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="block text-sm font-medium">{label}</label>
-        <button
-          type="button"
-          onClick={addItem}
-          className="flex items-center gap-1 text-sm text-primary hover:text-primary/80"
-        >
-          <Plus className="h-4 w-4" />
-          Add
-        </button>
+        {!showSelector ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (onShowSelector) {
+                onShowSelector();
+              } else {
+                addItem();
+              }
+            }}
+            disabled={loadingRefs}
+            className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        ) : (
+          <ComponentSelector
+            components={components || []}
+            onSelect={(uri) => {
+              if (uri !== null) {
+                addItem(uri);
+              } else {
+                addItem();
+              }
+            }}
+            placeholder="Select or add new..."
+          />
+        )}
       </div>
 
       <div className="space-y-2">

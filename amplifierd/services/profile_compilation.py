@@ -80,7 +80,7 @@ class ProfileCompilationService:
         manifest_data = {
             "name": profile.name,
             "version": profile.version,
-            "agents": sorted(profile.agents or []),
+            "agents": sorted((profile.agents or {}).items()),  # Dict items for hashing
             "context": sorted((profile.context or {}).items()),  # Dict items for hashing
             "tools": [{"module": t.module, "source": t.source} for t in profile.tools],
             "hooks": [{"module": h.module, "source": h.source} for h in profile.hooks],
@@ -191,16 +191,16 @@ class ProfileCompilationService:
                 assets["context-manager"].append(resolved_path)
                 logger.debug(f"Resolved context-manager: {profile.session.context_manager.module}")
 
-            # Resolve agent refs (schema v2: list of file refs)
+            # Resolve agent refs (schema v2: dict of name -> file refs)
             if profile.agents:
                 logger.debug(f"Resolving {len(profile.agents)} agent refs")
-                for agent_ref in profile.agents:
+                for agent_name, agent_ref in profile.agents.items():
                     try:
                         resolved_path = self._resolve_ref(agent_ref, "agent")
                         assets["agents"].append(resolved_path)
-                        logger.debug(f"Resolved agent: {agent_ref}")
+                        logger.debug(f"Resolved agent '{agent_name}': {agent_ref}")
                     except RefResolutionError as e:
-                        logger.error(f"Failed to resolve agent ref '{agent_ref}': {e}")
+                        logger.error(f"Failed to resolve agent ref '{agent_ref}' for '{agent_name}': {e}")
                         raise
 
             # Resolve context refs (schema v2: dict of name -> directory refs)

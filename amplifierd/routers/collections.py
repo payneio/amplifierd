@@ -11,6 +11,7 @@ from amplifier_library.storage import get_share_dir
 from amplifier_library.storage import get_state_dir
 
 from ..models import CollectionInfo
+from ..models import ComponentRefsResponse
 from ..services.collection_service import CollectionService
 
 router = APIRouter(prefix="/api/v1/collections", tags=["collections"])
@@ -68,6 +69,27 @@ async def list_collections(
     return service.list_collections()
 
 
+@router.get("/component-refs", response_model=ComponentRefsResponse)
+async def get_component_refs(
+    service: Annotated[CollectionService, Depends(get_collection_service)],
+) -> ComponentRefsResponse:
+    """Get all component references used across all profiles.
+
+    Returns all component URIs (orchestrators, context managers, providers, tools,
+    hooks, agents, contexts) used in any profile across all collections, with the
+    profile identifier for each usage.
+
+    Response is sorted by profile identifier for consistent ordering.
+
+    Args:
+        service: Collection service instance
+
+    Returns:
+        ComponentRefsResponse with all component refs organized by type
+    """
+    return service.get_all_component_refs()
+
+
 @router.get("/{identifier:path}", response_model=CollectionInfo)
 async def get_collection(
     identifier: str,
@@ -99,22 +121,31 @@ async def get_collection(
 async def mount_collection(
     request: MountCollectionRequest,
     service: Annotated[CollectionService, Depends(get_collection_service)],
-) -> dict[str, str]:
-    """Mount a collection.
+) -> dict[str, str | int | None]:
+    """Mount a collection and automatically sync profiles.
 
     Args:
         request: Mount collection request
         service: Collection service instance
 
     Returns:
-        Mount status
+        Mount status including profile count and any warnings
 
     Raises:
         HTTPException: 409 if already mounted, 400 for invalid source, 500 for other errors
     """
     try:
-        service.mount_collection(request.identifier, request.source)
-        return {"status": "mounted", "identifier": request.identifier, "source": request.source}
+        result = service.mount_collection(request.identifier, request.source)
+        response = {
+            "status": "mounted",
+            "identifier": result.collection_id,
+            "source": request.source,
+            "profile_count": result.profile_count,
+            "message": result.message,
+        }
+        if result.warning:
+            response["warning"] = result.warning
+        return response
     except ValueError as exc:
         if "already" in str(exc).lower():
             raise HTTPException(status_code=409, detail=str(exc)) from exc

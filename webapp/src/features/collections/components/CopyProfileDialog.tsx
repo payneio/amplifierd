@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertCircle } from 'lucide-react';
-import * as api from '@/api';
+import { useCopyProfile } from '../hooks/useCollections';
 import type { ProfileDetails } from '@/types/api';
 
 interface CopyProfileDialogProps {
@@ -15,6 +15,7 @@ export function CopyProfileDialog({ sourceProfile, open, onClose, onSuccess }: C
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const copyMutation = useCopyProfile();
 
   const validateName = (name: string): string | null => {
     if (!name) {
@@ -39,7 +40,10 @@ export function CopyProfileDialog({ sourceProfile, open, onClose, onSuccess }: C
     setError(null);
 
     try {
-      const copiedProfile = await api.copyProfile(sourceProfile.name, newName);
+      const copiedProfile = await copyMutation.mutateAsync({
+        sourceName: sourceProfile.name,
+        newName: newName.trim(),
+      });
       onSuccess(copiedProfile);
       setNewName('');
       onClose();

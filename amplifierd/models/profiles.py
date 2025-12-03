@@ -73,6 +73,6 @@ class ProfileDetails(CamelCaseModel):
     tools: list[ModuleConfig] = Field(description="Tool modules")
     hooks: list[ModuleConfig] = Field(description="Hook modules")
     session: SessionConfig | None = Field(default=None, description="Session configuration (schema v2)")
-    agents: list[str] = Field(default_factory=list, description="Agent file references")
+    agents: dict[str, str] = Field(default_factory=dict, description="Agent file references (name -> ref)")
     context: dict[str, str] = Field(default_factory=dict, description="Context directory references (name -> ref)")
     instruction: str | None = Field(default=None, description="Profile system instruction from markdown body")

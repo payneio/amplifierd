@@ -303,7 +303,7 @@ class ProfileService:
             tools=self._convert_module_configs(profile_data.tools or []),
             hooks=self._convert_module_configs(profile_data.hooks or []),
             session=session,
-            agents=list(profile_data.agents.keys()) if profile_data.agents else [],
+            agents=profile_data.agents or {},
             context=profile_data.context_refs or {},
             instruction=profile_data.instruction,
         )
@@ -737,8 +737,8 @@ class ProfileService:
         if source_profile.instruction or source_profile.agents or source_profile.context:
             local_profile_dir = self.profiles_dir / "local" / new_name
 
-            # Build agents dict from list
-            agents = {agent: agent for agent in source_profile.agents} if source_profile.agents else None
+            # Pass through agents dict as-is
+            agents = source_profile.agents if source_profile.agents else None
 
             manifest_content = self._generate_profile_manifest(
                 new_profile,
@@ -790,7 +790,7 @@ class ProfileService:
             providers=request.providers if request.providers is not None else current.providers,
             tools=request.tools if request.tools is not None else current.tools,
             hooks=request.hooks if request.hooks is not None else current.hooks,
-            agents=list(request.agents.keys()) if request.agents is not None else current.agents,
+            agents=request.agents if request.agents is not None else current.agents,
             context=request.contexts if request.contexts is not None else current.context,
             instruction=request.instruction if request.instruction is not None else current.instruction,
         )
@@ -798,11 +798,7 @@ class ProfileService:
         orchestrator = request.orchestrator if request.orchestrator is not None else None
         context = request.context if request.context is not None else None
 
-        agents = (
-            request.agents
-            if request.agents is not None
-            else ({agent: agent for agent in current.agents} if current.agents else None)
-        )
+        agents = request.agents if request.agents is not None else (current.agents if current.agents else None)
         contexts = request.contexts if request.contexts is not None else current.context
         instruction = request.instruction if request.instruction is not None else current.instruction
 

@@ -405,15 +405,15 @@ class ProfileDiscoveryService:
 
             # Extract agent and context refs (schema v2)
             # These can be either lists (simple refs) or dicts (named refs)
-            agents_data = data.get("agents", [])
+            agents_data = data.get("agents", {})
             context_data = data.get("context", [])
 
-            # Convert dict format {name: url} to list of urls
-            if isinstance(agents_data, dict):
-                agents_data = list(agents_data.values())
-            elif not isinstance(agents_data, list):
+            # Convert list format to dict with generated names
+            if isinstance(agents_data, list):
+                agents_data = {f"agent_{i}": ref for i, ref in enumerate(agents_data)}
+            elif not isinstance(agents_data, dict):
                 logger.warning(f"Invalid agents field in {profile_file.name}: expected list or dict")
-                agents_data = []
+                agents_data = {}
 
             # Keep context as dict to preserve names
             # Context format: {name: ref} where name is used for directory naming

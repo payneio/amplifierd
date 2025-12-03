@@ -1,6 +1,7 @@
 """Amplified directories API endpoints."""
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -8,6 +9,8 @@ from fastapi import Depends
 from fastapi import HTTPException
 
 from amplifier_library.config.loader import load_config
+from amplifierd.models.amplified_directories import AgentsContentResponse
+from amplifierd.models.amplified_directories import AgentsContentUpdate
 from amplifierd.models.amplified_directories import AmplifiedDirectory
 from amplifierd.models.amplified_directories import AmplifiedDirectoryCreate
 from amplifierd.models.amplified_directories import AmplifiedDirectoryList
@@ -19,8 +22,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/amplified-directories", tags=["amplified-directories"])
 
 
+@lru_cache(maxsize=1)
 def get_service() -> AmplifiedDirectoryService:
-    """Get amplified directory service instance."""
+    """Get amplified directory service singleton instance."""
     config = load_config()
     data_path = Path(config.data_path)
     return AmplifiedDirectoryService(data_path)
@@ -176,6 +180,56 @@ async def update_amplified_directory(
     except Exception as e:
         logger.error(f"Failed to update amplified directory {relative_path}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+@router.put("/{relative_path:path}/agents", response_model=AgentsContentResponse)
+async def update_agents_content(
+    relative_path: str,
+    update_req: AgentsContentUpdate,
+    service: AmplifiedDirectoryService = Depends(get_service),
+) -> AgentsContentResponse:
+    """Update AGENTS.md file for an amplified directory.
+
+    Args:
+        relative_path: Path relative to AMPLIFIERD_DATA_PATH
+        update_req: New content for AGENTS.md
+        service: Injected service instance
+
+    Returns:
+        Success status and message
+
+    Raises:
+        404: Directory not found or not amplified
+        400: Invalid content (empty)
+        500: File write failed
+    """
+    try:
+        # Basic validation
+        if not update_req.content.strip():
+            raise HTTPException(status_code=400, detail="AGENTS.md content cannot be empty")
+
+        # Update agents file
+        success = service.update_agents_content(relative_path, update_req.content)
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Amplified directory not found: {relative_path}",
+            )
+
+        return AgentsContentResponse(
+            success=True,
+            message="AGENTS.md updated successfully",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update AGENTS.md for {relative_path}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update AGENTS.md: {str(e)}",
+        ) from e
 
 
 @router.delete("/{relative_path:path}", status_code=204)

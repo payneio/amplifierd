@@ -21,6 +21,19 @@ import yaml
 from amplifier_library.storage.paths import get_cache_dir
 from amplifier_library.storage.paths import get_state_dir
 from amplifierd.models.collections import CollectionInfo
+from amplifierd.models.collections import ComponentRefsResponse
+
+
+@dataclass
+class MountResult:
+    """Result of mounting a collection."""
+
+    success: bool
+    collection_id: str
+    profile_count: int
+    message: str
+    warning: str | None = None
+
 
 if TYPE_CHECKING:
     from amplifierd.services.profile_compilation import ProfileCompilationService
@@ -276,8 +289,8 @@ class CollectionService:
             profiles=[],  # Profiles loaded separately
         )
 
-    def mount_collection(self, identifier: str, source: str) -> None:
-        """Mount a collection from a source.
+    def mount_collection(self, identifier: str, source: str) -> MountResult:
+        """Mount a collection from a source and sync profiles.
 
         Source can be:
         - git+URL: Clones repository to cache
@@ -287,6 +300,9 @@ class CollectionService:
             identifier: Collection identifier (directory name)
             source: Git URL (git+...) or local filesystem path
 
+        Returns:
+            MountResult with success status, profile count, and any warnings
+
         Raises:
             ValueError: If collection already exists
             RuntimeError: If mounting fails
@@ -295,9 +311,10 @@ class CollectionService:
             raise ValueError(f"Collection already exists: {identifier}")
 
         try:
+            # Clone or validate source
             if source.startswith("git+"):
                 # Clone/cache the git repository
-                self._clone_to_cache(identifier, source)
+                collection_path = self._clone_to_cache(identifier, source)
             else:
                 # Local filesystem path - validate it exists
                 source_path = Path(source)
@@ -305,6 +322,7 @@ class CollectionService:
                     raise FileNotFoundError(f"Source directory not found: {source}")
                 if not source_path.is_dir():
                     raise ValueError(f"Source is not a directory: {source}")
+                collection_path = source_path
 
             # Add to registry
             self._add_collection_to_registry(
@@ -313,6 +331,26 @@ class CollectionService:
             )
 
             logger.info(f"Successfully mounted collection {identifier} from {source}")
+
+            # Sync profiles
+            profile_count, errors = self._sync_collection_profiles(identifier, collection_path)
+
+            if errors:
+                warning = f"Some profiles failed to compile: {'; '.join(errors)}"
+                return MountResult(
+                    success=True,
+                    collection_id=identifier,
+                    profile_count=profile_count,
+                    message=f"Collection mounted with {profile_count} profile(s)",
+                    warning=warning,
+                )
+
+            return MountResult(
+                success=True,
+                collection_id=identifier,
+                profile_count=profile_count,
+                message=f"Collection mounted successfully with {profile_count} profile(s)",
+            )
 
         except Exception as e:
             raise RuntimeError(f"Failed to mount collection {identifier}: {e}") from e
@@ -508,6 +546,56 @@ class CollectionService:
         """
         self._load_registry()
 
+    def _sync_collection_profiles(
+        self, collection_id: str, collection_path: Path, force_compile: bool = False
+    ) -> tuple[int, list[str]]:
+        """Discover and compile profiles for a collection.
+
+        Args:
+            collection_id: Collection identifier
+            collection_path: Path to collection directory
+            force_compile: If True, force profile recompilation even if up-to-date
+
+        Returns:
+            (profile_count, errors) where errors is list of error messages
+        """
+        errors = []
+        profile_count = 0
+
+        if not self.discovery_service:
+            return 0, ["Profile discovery service not available"]
+
+        try:
+            logger.info(f"Auto-discovering profiles from collection: {collection_id}")
+            discovered_profiles = self.discovery_service.discover_profiles(collection_id, collection_path)
+            logger.info(f"Discovered {len(discovered_profiles)} profiles from {collection_id}")
+
+            # Auto-compile profiles if compilation service available
+            if self.compilation_service and discovered_profiles:
+                for profile in discovered_profiles:
+                    try:
+                        compiled_path = self.compilation_service.compile_profile(
+                            collection_id, profile, force=force_compile
+                        )
+                        logger.info(f"Auto-compiled profile: {collection_id}/{profile.name} → {compiled_path}")
+                        profile_count += 1
+                    except Exception as e:
+                        error_msg = f"Failed to compile {collection_id}/{profile.name}: {e}"
+                        logger.warning(error_msg)
+                        errors.append(error_msg)
+
+                logger.info(f"Auto-compiled {profile_count}/{len(discovered_profiles)} profiles from {collection_id}")
+            else:
+                # Discovery succeeded but no compilation service
+                profile_count = len(discovered_profiles)
+
+        except Exception as e:
+            error_msg = f"Failed to discover profiles from {collection_id}: {e}"
+            logger.warning(error_msg)
+            errors.append(error_msg)
+
+        return profile_count, errors
+
     def sync_collections(
         self,
         force_refresh: bool = False,
@@ -563,35 +651,8 @@ class CollectionService:
                     source_dir = local_path
                     results[name] = "synced"
 
-                if self.discovery_service and results.get(name) in [
-                    "synced",
-                    "updated",
-                ]:
-                    try:
-                        logger.info(f"Auto-discovering profiles from collection: {name}")
-                        discovered_profiles = self.discovery_service.discover_profiles(name, source_dir)
-                        logger.info(f"Discovered {len(discovered_profiles)} profiles from {name}")
-
-                        # Auto-compile profiles if enabled and compilation service available
-                        if auto_compile and self.compilation_service and discovered_profiles:
-                            compiled_count = 0
-                            for profile in discovered_profiles:
-                                try:
-                                    # Pass force_compile to enable change detection
-                                    compiled_path = self.compilation_service.compile_profile(
-                                        name, profile, force=force_compile
-                                    )
-                                    logger.info(f"Auto-compiled profile: {name}/{profile.name} → {compiled_path}")
-                                    compiled_count += 1
-                                except Exception as e:
-                                    logger.warning(f"Failed to auto-compile {name}/{profile.name}: {e}")
-
-                            logger.info(
-                                f"Auto-compiled {compiled_count}/{len(discovered_profiles)} profiles from {name}"
-                            )
-
-                    except Exception as e:
-                        logger.warning(f"Failed to auto-discover profiles from {name}: {e}")
+                if auto_compile and results.get(name) in ["synced", "updated"]:
+                    self._sync_collection_profiles(name, source_dir, force_compile=force_compile)
 
             except Exception as e:
                 logger.error(f"Error syncing collection {name}: {e}")
@@ -599,3 +660,154 @@ class CollectionService:
 
         logger.info(f"Collection sync complete: {results}")
         return results
+
+    def get_all_component_refs(self) -> ComponentRefsResponse:
+        """Get all component references used across all profiles.
+
+        Returns:
+            ComponentRefsResponse with all component refs organized by type,
+            sorted by profile identifier
+        """
+        from amplifierd.models.collections import ComponentRef
+        from amplifierd.models.collections import ComponentRefsResponse
+
+        # Initialize lists for each component type
+        refs = {
+            "orchestrators": [],
+            "context_managers": [],
+            "providers": [],
+            "tools": [],
+            "hooks": [],
+            "agents": [],
+            "contexts": [],
+        }
+
+        # Process all collections (including local)
+        collections_to_process = []
+
+        # Add registered collections
+        for name in self._collections:
+            collections_to_process.append((name, self.collections_cache_dir / name))
+
+        # Add local collection if it exists
+        local_dir = self.collections_cache_dir / "local"
+        if local_dir.exists() and "local" not in self._collections:
+            collections_to_process.append(("local", local_dir))
+
+        # Process each collection
+        for collection_id, collection_dir in collections_to_process:
+            if not collection_dir.exists():
+                continue
+
+            # Find all profile directories (have profile.md or {name}.md)
+            for profile_dir in collection_dir.iterdir():
+                if not profile_dir.is_dir():
+                    continue
+
+                profile_id = profile_dir.name
+
+                # Try standard naming first: profile.md
+                profile_file = profile_dir / "profile.md"
+
+                # Fall back to profile-name.md (e.g., dev.md in dev/ directory)
+                if not profile_file.exists():
+                    profile_file = profile_dir / f"{profile_id}.md"
+
+                if not profile_file.exists():
+                    continue
+
+                profile_identifier = f"{collection_id}/{profile_id}"
+
+                # Parse profile and extract component refs
+                try:
+                    # Parse YAML frontmatter manually
+                    import yaml
+
+                    content = profile_file.read_text(encoding="utf-8")
+
+                    # Check for YAML frontmatter
+                    if not content.startswith("---"):
+                        continue
+
+                    # Split frontmatter
+                    parts = content.split("---", 2)
+                    if len(parts) < 3:
+                        continue
+
+                    yaml_content = parts[1]
+
+                    # Parse YAML
+                    try:
+                        data = yaml.safe_load(yaml_content)
+                    except yaml.YAMLError:
+                        continue
+
+                    if not isinstance(data, dict):
+                        continue
+
+                    # Extract orchestrator (schema v2)
+                    session = data.get("session", {})
+                    if (orchestrator := session.get("orchestrator", {})) and (source := orchestrator.get("source")):
+                        name = orchestrator.get("module", "orchestrator")
+                        refs["orchestrators"].append(ComponentRef(profile=profile_identifier, name=name, uri=source))
+
+                    # Extract context manager (schema v2)
+                    if (context_manager := session.get("context_manager", {})) and (
+                        source := context_manager.get("source")
+                    ):
+                        name = context_manager.get("module", "context-manager")
+                        refs["context_managers"].append(ComponentRef(profile=profile_identifier, name=name, uri=source))
+
+                    # Extract providers
+                    for provider in data.get("providers", []):
+                        if isinstance(provider, dict) and (source := provider.get("source")):
+                            name = provider.get("module", "provider")
+                            refs["providers"].append(ComponentRef(profile=profile_identifier, name=name, uri=source))
+
+                    # Extract tools
+                    for tool in data.get("tools", []):
+                        if isinstance(tool, dict) and (source := tool.get("source")):
+                            name = tool.get("module", "tool")
+                            refs["tools"].append(ComponentRef(profile=profile_identifier, name=name, uri=source))
+
+                    # Extract hooks
+                    for hook in data.get("hooks", []):
+                        if isinstance(hook, dict) and (source := hook.get("source")):
+                            name = hook.get("module", "hook")
+                            refs["hooks"].append(ComponentRef(profile=profile_identifier, name=name, uri=source))
+
+                    # Extract agents (dict of name -> uri)
+                    agents_dict = data.get("agents", {})
+                    if isinstance(agents_dict, dict):
+                        for agent_name, agent_uri in agents_dict.items():
+                            if isinstance(agent_uri, str):
+                                refs["agents"].append(
+                                    ComponentRef(profile=profile_identifier, name=agent_name, uri=agent_uri)
+                                )
+
+                    # Extract contexts (dict of name -> uri)
+                    context_dict = data.get("context", {})
+                    if isinstance(context_dict, dict):
+                        for context_name, context_uri in context_dict.items():
+                            if isinstance(context_uri, str):
+                                refs["contexts"].append(
+                                    ComponentRef(profile=profile_identifier, name=context_name, uri=context_uri)
+                                )
+
+                except Exception as e:
+                    logger.warning(f"Failed to parse profile {profile_identifier}: {e}")
+                    continue
+
+        # Sort each list by profile identifier
+        for component_type in refs:
+            refs[component_type].sort(key=lambda x: x.profile)
+
+        return ComponentRefsResponse(
+            orchestrators=refs["orchestrators"],
+            context_managers=refs["context_managers"],
+            providers=refs["providers"],
+            tools=refs["tools"],
+            hooks=refs["hooks"],
+            agents=refs["agents"],
+            contexts=refs["contexts"],
+        )

@@ -44,10 +44,10 @@ def sample_profile() -> ProfileDetails:
         collection_id="test-collection",
         source="test",
         is_active=False,
-        agents=[
-            "git+https://github.com/org/repo@main/agents/agent1.md",
-            "git+https://github.com/org/repo@main/agents/agent2.md",
-        ],
+        agents={
+            "agent1": "git+https://github.com/org/repo@main/agents/agent1.md",
+            "agent2": "git+https://github.com/org/repo@main/agents/agent2.md",
+        },
         context={"project-docs": "git+https://github.com/org/repo@main/context-docs"},
         providers=[
             ModuleConfig(

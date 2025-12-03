@@ -357,6 +357,38 @@ class AmplifiedDirectoryService:
             logger.error(f"Failed to update amplified directory {relative_path}: {e}")
             raise
 
+    def update_agents_content(self, relative_path: str, agents_content: str) -> bool:
+        """Update AGENTS.md file for an amplified directory.
+
+        Args:
+            relative_path: Path relative to root
+            agents_content: New content for AGENTS.md
+
+        Returns:
+            True if updated successfully
+
+        Raises:
+            ValueError: If path is invalid
+            OSError: If write fails
+        """
+        # Validate and resolve path
+        dir_path = self._validate_and_resolve_path(relative_path)
+
+        # Check if amplified
+        if not self._get_marker_path(dir_path).exists():
+            return False
+
+        try:
+            # Write agents file
+            self._write_agents_file(dir_path, agents_content)
+
+            logger.info(f"Updated AGENTS.md for {relative_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to update AGENTS.md for {relative_path}: {e}")
+            raise
+
     def delete(self, relative_path: str, remove_marker: bool = False) -> bool:
         """Unregister amplified directory.
 
@@ -555,6 +587,42 @@ class AmplifiedDirectoryService:
 
             # Rename to metadata.json (atomic)
             tmp_path.rename(metadata_path)
+
+        except Exception:
+            # Cleanup tmp file on failure
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
+
+    def _write_agents_file(self, dir_path: Path, agents_content: str) -> None:
+        """Write AGENTS.md to filesystem atomically.
+
+        Args:
+            dir_path: Absolute directory path
+            agents_content: Content to write
+
+        Raises:
+            OSError: If write fails
+
+        Implementation:
+            Uses tmp + rename pattern for atomic writes.
+        """
+        agents_path = self._get_marker_path(dir_path) / "AGENTS.md"
+
+        # Ensure .amplified directory exists
+        agents_path.parent.mkdir(exist_ok=True)
+
+        # Ensure content ends with newline
+        content = agents_content if agents_content.endswith("\n") else agents_content + "\n"
+
+        # Write to tmp file
+        tmp_path = agents_path.with_suffix(".tmp")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            # Rename to AGENTS.md (atomic)
+            tmp_path.rename(agents_path)
 
         except Exception:
             # Cleanup tmp file on failure

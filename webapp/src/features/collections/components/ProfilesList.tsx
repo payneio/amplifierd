@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Copy, Check, ExternalLink } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProfiles } from '../hooks/useCollections';
 import { ProfileDetailModal } from './ProfileDetailModal';
 import { ProfileForm } from './ProfileForm';
 import * as api from '@/api/profiles';
 import type { CreateProfileRequest, UpdateProfileRequest, ProfileDetails } from '@/types/api';
+import { toWebUrl } from '@/utils/gitUrl';
 
 export function ProfilesList() {
   const { profiles, isLoading } = useProfiles();
@@ -13,6 +14,7 @@ export function ProfilesList() {
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [editingProfile, setEditingProfile] = useState<ProfileDetails | null>(null);
+  const [copiedProfile, setCopiedProfile] = useState<string | null>(null);
 
   const createMutation = useMutation({
     mutationFn: api.createProfile,
@@ -54,6 +56,16 @@ export function ProfilesList() {
       return;
     }
     setEditingProfile(profile);
+  };
+
+  const handleCopySource = async (profileName: string, source: string) => {
+    try {
+      await navigator.clipboard.writeText(source);
+      setCopiedProfile(profileName);
+      setTimeout(() => setCopiedProfile(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy profile source:', error);
+    }
   };
 
   if (isLoading) {
@@ -98,27 +110,55 @@ export function ProfilesList() {
                       Source: {profile.source}
                     </p>
                   </button>
-                  {profile.source.startsWith('local/') && (
-                    <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ml-4">
+                    {!profile.source.startsWith('local') && (
                       <button
-                        onClick={async () => {
-                          const details = await api.getProfileDetails(profile.name);
-                          handleEdit(details);
-                        }}
-                        className="p-2 hover:bg-background rounded-md"
-                        title="Edit profile"
+                        onClick={() => handleCopySource(profile.name, profile.source)}
+                        className="p-2 hover:bg-background hover:text-blue-600 rounded-md transition-colors"
+                        title="Copy profile source"
+                        aria-label="Copy profile source to clipboard"
                       >
-                        <Edit className="h-4 w-4" />
+                        {copiedProfile === profile.name ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </button>
-                      <button
-                        onClick={() => handleDelete(profile.name, profile.source)}
-                        className="p-2 hover:bg-background rounded-md text-destructive"
-                        title="Delete profile"
+                    )}
+                    {toWebUrl(profile.source) && (
+                      <a
+                        href={toWebUrl(profile.source)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 hover:bg-background hover:text-blue-600 rounded-md transition-colors"
+                        title="View repository in browser"
+                        aria-label="Open repository in browser"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                    {profile.source.startsWith('local/') && (
+                      <>
+                        <button
+                          onClick={async () => {
+                            const details = await api.getProfileDetails(profile.name);
+                            handleEdit(details);
+                          }}
+                          className="p-2 hover:bg-background rounded-md"
+                          title="Edit profile"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(profile.name, profile.source)}
+                          className="p-2 hover:bg-background rounded-md text-destructive"
+                          title="Delete profile"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -165,6 +205,11 @@ export function ProfilesList() {
             providers: editingProfile.providers,
             tools: editingProfile.tools,
             hooks: editingProfile.hooks,
+            orchestrator: editingProfile.session?.orchestrator,
+            context: editingProfile.session?.contextManager,
+            agents: editingProfile.agents,
+            contexts: editingProfile.context,
+            instruction: editingProfile.instruction,
           }}
           mode="edit"
         />

@@ -70,3 +70,16 @@ class AmplifiedDirectoryList(BaseModel):
 
     directories: list[AmplifiedDirectory]
     total: int
+
+
+class AgentsContentUpdate(BaseModel):
+    """Request to update AGENTS.md content"""
+
+    content: str = Field(..., description="New content for AGENTS.md file")
+
+
+class AgentsContentResponse(BaseModel):
+    """Response from updating AGENTS.md"""
+
+    success: bool = Field(..., description="Whether update succeeded")
+    message: str = Field(..., description="Success or error message")

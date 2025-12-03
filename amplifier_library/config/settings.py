@@ -9,6 +9,9 @@ Contract:
 - Side Effects: None (read-only)
 """
 
+from pathlib import Path
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 
@@ -46,6 +49,24 @@ class DaemonSettings(BaseSettings):
     workers: int = 1
 
     data_path: str = "/data"
+
+    @field_validator('data_path')
+    @classmethod
+    def expand_and_resolve_path(cls, v: str) -> str:
+        """Expand ~ and resolve to absolute path.
+
+        This allows users to specify paths like:
+        - "~" or "~/data" (expands to user home)
+        - "./data" (resolves relative to cwd)
+        - "/data" (absolute paths pass through)
+
+        Args:
+            v: Path string (may contain ~ or be relative)
+
+        Returns:
+            Absolute path as string
+        """
+        return str(Path(v).expanduser().resolve())
 
     # Collection sync behavior on startup
     force_collection_refresh_on_start: bool = False

@@ -50,15 +50,28 @@ port: 8420
 log_level: "info"
 workers: 1
 
-# Data directory root
+# Data directory root (default: /data)
+# Supports: absolute paths (/data), ~ for home directory (~), relative paths (./data)
 data_path: "/data"
 ```
 
 Environment variables override YAML settings (prefixed with `AMPLIFIERD_`):
 
 ```bash
+# Override server port
 AMPLIFIERD_PORT=8421 python -m amplifierd
+
+# Use home directory for data
+AMPLIFIERD_DATA_PATH="~" python -m amplifierd
+
+# Use custom directory
+AMPLIFIERD_DATA_PATH="/path/to/custom/data" python -m amplifierd
 ```
+
+**Path Expansion:**
+- Absolute paths (e.g., `/data`) are used as-is
+- Tilde paths (e.g., `~` or `~/amplifier`) expand to your home directory
+- Relative paths (e.g., `./data`) resolve to absolute paths from current directory
 
 ## API Endpoints
 

@@ -45,7 +45,7 @@ export interface ProfileDetails {
   tools: ModuleConfig[];
   hooks: ModuleConfig[];
   session?: SessionConfig;
-  agents?: string[];
+  agents?: Record<string, string>;
   context?: Record<string, string>;
   instruction?: string;
 }
@@ -149,4 +149,20 @@ export interface DirectoryCreateRequest {
 export interface DirectoryCreateResponse {
   created_path: string;
   absolute_path: string;
+}
+
+export interface ComponentRef {
+  profile: string;
+  name: string;
+  uri: string;
+}
+
+export interface ComponentRefsResponse {
+  orchestrators: ComponentRef[];
+  contextManagers: ComponentRef[];
+  providers: ComponentRef[];
+  tools: ComponentRef[];
+  hooks: ComponentRef[];
+  agents: ComponentRef[];
+  contexts: ComponentRef[];
 }

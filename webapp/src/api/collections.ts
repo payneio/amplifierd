@@ -1,5 +1,5 @@
 import { fetchApi } from './client';
-import type { Collection } from '@/types/api';
+import type { Collection, ComponentRefsResponse } from '@/types/api';
 import type {
   AllCacheStatus,
   CollectionCacheStatus,
@@ -59,8 +59,17 @@ export const updateProfile = (
   );
 };
 
+export interface MountCollectionResponse {
+  status: string;
+  identifier: string;
+  source: string;
+  profile_count: number;
+  message: string;
+  warning?: string;
+}
+
 export const mountCollection = (data: { identifier: string; source: string }) =>
-  fetchApi<{ status: string; identifier: string; source: string }>('/api/v1/collections/', {
+  fetchApi<MountCollectionResponse>('/api/v1/collections/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -69,3 +78,6 @@ export const unmountCollection = (identifier: string) =>
   fetchApi<{ success: boolean }>(`/api/v1/collections/${identifier}`, {
     method: 'DELETE',
   });
+
+export const getComponentRefs = () =>
+  fetchApi<ComponentRefsResponse>('/api/v1/collections/component-refs');

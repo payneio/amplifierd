@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, RefreshCw, Plus, Edit, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Plus, Edit, Trash2, Copy, Check, ExternalLink } from 'lucide-react';
 import { useCollections, useProfiles, useCacheStatus, useUpdateAllCollections, useUpdateCollection, useUpdateProfile, useMountCollection, useUnmountCollection } from '../hooks/useCollections';
 import { ProfileDetailModal } from './ProfileDetailModal';
 import { ProfileForm } from './ProfileForm';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/api';
 import type { CreateProfileRequest, UpdateProfileRequest, ProfileDetails } from '@/types/api';
+import { toWebUrl } from '@/utils/gitUrl';
 
 export function CollectionsWithProfiles() {
   const { collections, isLoading: collectionsLoading } = useCollections();
@@ -28,6 +29,7 @@ export function CollectionsWithProfiles() {
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingCollection, setIsAddingCollection] = useState(false);
   const [editingProfile, setEditingProfile] = useState<ProfileDetails | null>(null);
+  const [copiedCollection, setCopiedCollection] = useState<string | null>(null);
 
   const isLoading = collectionsLoading || profilesLoading || cacheStatusLoading;
 
@@ -74,15 +76,21 @@ export function CollectionsWithProfiles() {
     }
   };
 
-  const handleMountCollection = (data: { identifier: string; source: string }) => {
-    mountCollectionMutation.mutate(data, {
-      onSuccess: () => {
-        setIsAddingCollection(false);
-      },
-      onError: (error) => {
-        alert(`Failed to mount collection: ${error.message}`);
-      },
-    });
+  const handleMountCollection = async (data: { identifier: string; source: string }) => {
+    try {
+      const result = await mountCollectionMutation.mutateAsync(data);
+
+      // Show success with profile count
+      if (result.warning) {
+        alert(`${result.message}\n\nWarning: ${result.warning}`);
+      } else {
+        alert(result.message);
+      }
+
+      setIsAddingCollection(false);
+    } catch (error) {
+      alert(`Failed to mount collection: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleUnmountCollection = (identifier: string) => {
@@ -92,6 +100,16 @@ export function CollectionsWithProfiles() {
           alert(`Failed to unmount collection: ${error.message}`);
         },
       });
+    }
+  };
+
+  const handleCopyCollectionUri = async (identifier: string, source: string) => {
+    try {
+      await navigator.clipboard.writeText(source);
+      setCopiedCollection(identifier);
+      setTimeout(() => setCopiedCollection(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy collection URI:', error);
     }
   };
 
@@ -218,6 +236,32 @@ export function CollectionsWithProfiles() {
                           onUpdate={() => updateCollectionMutation.mutate({ identifier: collection.identifier })}
                           isUpdating={updateCollectionMutation.isPending}
                         />
+                      )}
+                      {collection.source !== 'local' && (
+                        <button
+                          onClick={() => handleCopyCollectionUri(collection.identifier, collection.source)}
+                          className="p-1.5 hover:bg-accent hover:text-blue-600 rounded-md transition-colors"
+                          title="Copy collection URI"
+                          aria-label="Copy collection URI to clipboard"
+                        >
+                          {copiedCollection === collection.identifier ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                      {toWebUrl(collection.source) && (
+                        <a
+                          href={toWebUrl(collection.source)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 hover:bg-accent hover:text-blue-600 rounded-md transition-colors"
+                          title="View repository in browser"
+                          aria-label="Open repository in browser"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
                       )}
                       {collection.identifier !== 'local' && (
                         <button
@@ -349,6 +393,11 @@ export function CollectionsWithProfiles() {
             providers: editingProfile.providers,
             tools: editingProfile.tools,
             hooks: editingProfile.hooks,
+            orchestrator: editingProfile.session?.orchestrator,
+            context: editingProfile.session?.contextManager,
+            agents: editingProfile.agents,
+            contexts: editingProfile.context,
+            instruction: editingProfile.instruction,
           }}
           mode="edit"
         />

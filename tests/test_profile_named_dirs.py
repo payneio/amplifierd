@@ -33,7 +33,7 @@ def test_profile() -> ProfileDetails:
             ModuleConfig(module="tool-web", source=None),
         ],
         hooks=[],
-        agents=[],
+        agents={},
         context={},
     )
 
