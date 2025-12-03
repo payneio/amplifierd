@@ -8,5 +8,9 @@ port: 8420
 log_level: "info"
 workers: 1
 
-# Data directory root
 data_path: "/data"
+
+
+startup:
+    check_cache_on_startup: true
+    update_stale_caches: true
