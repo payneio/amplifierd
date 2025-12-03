@@ -89,7 +89,6 @@ ai_working/tmp
 /DISCOVERIES.md
 /DOCKER_README.md
 /Dockerfile
-/Makefile
 /.env.example
 /AMPLIFIER_README.md
 .amplifier/local/backups
@@ -98,11 +97,12 @@ ai_working/tmp
 # working
 
 # amplifierd
-.amplifierd/state
-.amplifierd/cache
-.compilation_meta.json
+
+amplifierd/.amplifierd/state
+amplifierd/.amplifierd/cache
+amplifierd/.compilation_meta.json
 
 # temporary ignores during development
-.amplifierd/share/profiles
+amplifierd/.amplifierd/share/profiles
 
 
