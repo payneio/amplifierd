@@ -12,7 +12,7 @@
         "AMPLIFIERD_LOG_LEVEL": "debug",
         "AMPLIFIERD_PORT": "8421"
       },
-      "cwd": "${workspaceFolder}/amplifierd"
+      "cwd": "${workspaceFolder}"
     },
     {
       "name": "Amplifierd: Run Daemon (Production Mode)",
@@ -32,7 +32,7 @@
       "env": {
         "AMPLIFIERD_LOG_LEVEL": "info"
       },
-      "cwd": "${workspaceFolder}/amplifierd"
+      "cwd": "${workspaceFolder}"
     },
     {
       "name": "Pytest: Run All Tests",
@@ -42,7 +42,7 @@
       "args": ["-v", "--tb=short", "--color=yes"],
       "console": "integratedTerminal",
       "justMyCode": false,
-      "cwd": "${workspaceFolder}/amplifierd"
+      "cwd": "${workspaceFolder}"
     },
     {
       "name": "Pytest: Run Current Test File",
@@ -52,7 +52,7 @@
       "args": ["${file}", "-v", "--tb=short", "--color=yes"],
       "console": "integratedTerminal",
       "justMyCode": false,
-      "cwd": "${workspaceFolder}/amplifierd"
+      "cwd": "${workspaceFolder}"
     },
     {
       "name": "Pytest: Run with Coverage",
@@ -68,7 +68,7 @@
       ],
       "console": "integratedTerminal",
       "justMyCode": false,
-      "cwd": "${workspaceFolder}/amplifierd"
+      "cwd": "${workspaceFolder}"
     },
     {
       "name": "Python: Attach to Debugger",

@@ -1,0 +1,57 @@
+{
+  // === PYTHON CONFIGURATION ===
+  "python.analysis.ignore": ["output", "logs", "ai_context", "ai_working"],
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.autoFormatStrings": true,
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.fixAll": ["source.unusedImports"],
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.extraPaths": [],
+
+  // === PYTHON FORMATTING ===
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.rulers": [120],
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.unusedImports": "explicit",
+      "source.organizeImports": "explicit",
+      "source.formatDocument": "explicit"
+    }
+  },
+
+  // === RUFF CONFIGURATION ===
+  "ruff.nativeServer": "on",
+  "ruff.configuration": "${workspaceFolder}/ruff.toml",
+  "ruff.interpreter": ["${workspaceFolder}/.venv/bin/python"],
+  "ruff.exclude": [
+    "**/output/**",
+    "**/logs/**",
+    "**/ai_context/**",
+    "**/ai_working/**"
+  ],
+
+  // === TESTING CONFIGURATION ===
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+
+  // === FILE WATCHING & SEARCH OPTIMIZATION ===
+  "files.watcherExclude": {
+    "**/.uv/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true
+  },
+  "search.exclude": {
+    "**/.uv": true,
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/.data": true
+  }
+}

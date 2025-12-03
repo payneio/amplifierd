@@ -1,0 +1,87 @@
+{
+  "folders": [
+    {
+      "name": "root",
+      "path": "."
+    },
+    {
+      "name": "daemon",
+      "path": "amplifierd"
+    },
+    {
+      "name": "webapp",
+      "path": "webapp"
+    },
+    {
+      "name": "registry",
+      "path": "registry"
+    },
+    {
+      "name": "guides",
+      "path": "guides"
+    },
+    {
+      "name": "notebooks",
+      "path": "notebooks"
+    }
+  ],
+  "settings": {
+    // === UNIVERSAL EDITOR SETTINGS ===
+    // These apply to all folders in the workspace
+    "editor.rulers": [
+      120
+    ],
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs": "active",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    },
+    // === UNIVERSAL FILE SETTINGS ===
+    "files.eol": "\n",
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    // === WORKSPACE-WIDE FILE EXCLUSIONS ===
+    // These improve performance across all folders
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.ruff_cache": true,
+      "**/.pyright_cache": true,
+      "**/node_modules": true,
+      "**/.next": true,
+      "**/dist": true,
+      "**/.venv": true,
+      "**/.uv": true
+    },
+    // === WORKSPACE-WIDE SEARCH EXCLUSIONS ===
+    "search.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/.ruff_cache": true,
+      "**/.pyright_cache": true,
+      "**/node_modules": true,
+      "**/.next": true,
+      "**/dist": true,
+      "**/uv.lock": true,
+      "**/pnpm-lock.yaml": true,
+      "**/.venv": true,
+      "**/.uv": true
+    },
+    // === GIT CONFIGURATION ===
+    "git.detectSubmodulesLimit": 50,
+    "githubPullRequests.defaultMergeMethod": "squash"
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "charliermarsh.ruff",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "bradlc.vscode-tailwindcss"
+    ]
+  }
+}
