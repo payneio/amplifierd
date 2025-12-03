@@ -22,14 +22,14 @@ session:
   injection_size_limit: null
 tools:
   - module: tool-recipes
-    source: https://github.com/microsoft/amplifier-collection-recipes/@main#subdirectory=modules/tool-recipes
+    source: git+https://github.com/microsoft/amplifier-collection-recipes/@main#subdirectory=modules/tool-recipes
     config:
       session_dir: ~/.amplifier/projects
       auto_cleanup_days: 7
 agents:
   recipe-author: https://raw.githubusercontent.com/microsoft/amplifier-collection-recipes/refs/heads/main/agents/recipe-author.md
 contexts:
-  docs: https://github.com/microsoft/amplifier-collection-recipes/@main#subdirectory=docs
+  docs: git+https://github.com/microsoft/amplifier-collection-recipes/@main#subdirectory=docs
 ---
 
 @foundation:context/shared/common-agent-base.md
