@@ -1,5 +1,5 @@
 import type { AmplifiedDirectoryCreate } from '@/types/api';
-import { Folder, Plus, Info } from 'lucide-react';
+import { Folder, Info, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useDirectories } from '../hooks/useDirectories';
 import { CreateDirectoryDialog } from './CreateDirectoryDialog';
@@ -63,10 +63,17 @@ export function DirectoriesList({ onSelectDirectory, onViewDetails, selectedPath
               >
                 <Folder className="h-4 w-4 shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate">{dir.relative_path}</div>
+                  <div className="font-medium truncate">
+                    {dir.metadata?.name || dir.relative_path}
+                  </div>
+                  {dir.metadata?.name && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      /{dir.relative_path}
+                    </div>
+                  )}
                   {dir.default_profile && (
                     <div className="text-xs text-muted-foreground truncate">
-                      Profile: {dir.default_profile}
+                      Default profile: {dir.default_profile}
                     </div>
                   )}
                 </div>

@@ -1,5 +1,5 @@
-import type { AmplifiedDirectory } from '@/types/api';
 import { fetchApi } from '@/api/client';
+import type { AmplifiedDirectory } from '@/types/api';
 import { Edit, Folder, Info, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -125,7 +125,7 @@ export function DirectoryDetailsPanel({ directory, onEdit, onDelete }: Directory
         </div>
 
         <div className="border-t pt-4">
-          <h3 className="text-sm font-medium text-muted-foreground mb-2">Profile</h3>
+          <h3 className="text-sm font-medium text-muted-foreground mb-2">Default Profile</h3>
           {directory.default_profile ? (
             <div className="text-sm font-mono">{directory.default_profile}</div>
           ) : (

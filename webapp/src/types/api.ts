@@ -50,11 +50,17 @@ export interface ProfileDetails {
   instruction?: string;
 }
 
+export interface DirectoryMetadata {
+  name?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
 export interface AmplifiedDirectory {
   path: string;
   relative_path: string;
   default_profile?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: DirectoryMetadata;
   agents_content?: string;
   is_amplified: boolean;
 }
@@ -62,7 +68,7 @@ export interface AmplifiedDirectory {
 export interface AmplifiedDirectoryCreate {
   relative_path: string;
   default_profile?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: DirectoryMetadata;
   create_marker?: boolean;
 }
 
