@@ -1,1 +1,102 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Background Colors */
+    --background: 0 0% 100%;           /* white */
+    --foreground: 222.2 84% 4.9%;     /* near-black text */
+
+    --muted: 210 40% 96.1%;            /* light gray background */
+    --muted-foreground: 215.4 16.3% 46.9%;  /* gray text */
+
+    --popover: 0 0% 100%;              /* white */
+    --popover-foreground: 222.2 84% 4.9%;   /* near-black */
+
+    --accent: 210 40% 96.1%;           /* light blue-gray */
+    --accent-foreground: 222.2 47.4% 11.2%;  /* dark blue text */
+
+    /* Form Elements */
+    --input: 214.3 31.8% 91.4%;        /* light gray border */
+    --ring: 222.2 84% 4.9%;            /* focus ring color */
+
+    /* Border */
+    --border: 214.3 31.8% 91.4%;       /* light gray */
+
+    /* UI States */
+    --primary: 222.2 47.4% 11.2%;      /* primary action color */
+    --primary-foreground: 210 40% 98%; /* text on primary */
+
+    --destructive: 0 84.2% 60.2%;      /* red for destructive actions */
+    --destructive-foreground: 210 40% 98%; /* text on destructive */
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;      /* dark background */
+    --foreground: 210 40% 98%;         /* light text */
+
+    --muted: 217.2 32.6% 17.5%;        /* dark gray */
+    --muted-foreground: 215 20.2% 65.1%;  /* light gray text */
+
+    --popover: 222.2 84% 4.9%;         /* dark background */
+    --popover-foreground: 210 40% 98%; /* light text */
+
+    --accent: 217.2 32.6% 17.5%;       /* dark blue-gray */
+    --accent-foreground: 210 40% 98%;  /* light text */
+
+    --input: 217.2 32.6% 17.5%;        /* dark border */
+    --ring: 212.7 26.8% 83.9%;         /* light focus ring */
+
+    --border: 217.2 32.6% 17.5%;       /* dark gray */
+
+    --primary: 210 40% 98%;            /* light primary in dark mode */
+    --primary-foreground: 222.2 47.4% 11.2%; /* dark text on primary */
+
+    --destructive: 0 62.8% 30.6%;      /* darker red */
+    --destructive-foreground: 210 40% 98%; /* light text */
+  }
+}
+
+@layer utilities {
+  /* Background utilities */
+  .bg-background { background-color: hsl(var(--background)); }
+  .bg-foreground { background-color: hsl(var(--foreground)); }
+  .bg-muted { background-color: hsl(var(--muted)); }
+  .bg-accent { background-color: hsl(var(--accent)); }
+  .bg-popover { background-color: hsl(var(--popover)); }
+  .bg-primary { background-color: hsl(var(--primary)); }
+  .bg-destructive { background-color: hsl(var(--destructive)); }
+
+  /* Text utilities */
+  .text-foreground { color: hsl(var(--foreground)); }
+  .text-muted-foreground { color: hsl(var(--muted-foreground)); }
+  .text-accent-foreground { color: hsl(var(--accent-foreground)); }
+  .text-popover-foreground { color: hsl(var(--popover-foreground)); }
+  .text-primary-foreground { color: hsl(var(--primary-foreground)); }
+  .text-destructive-foreground { color: hsl(var(--destructive-foreground)); }
+
+  /* Border utilities */
+  .border-border { border-color: hsl(var(--border)); }
+  .border-input { border-color: hsl(var(--input)); }
+  .border-primary { border-color: hsl(var(--primary)); }
+  .border-destructive { border-color: hsl(var(--destructive)); }
+
+  /* Ring utilities */
+  .ring-ring { --tw-ring-color: hsl(var(--ring)); }
+  .ring-offset-background { --tw-ring-offset-color: hsl(var(--background)); }
+
+  /* Hover state utilities */
+  .hover\:bg-accent:hover { background-color: hsl(var(--accent)); }
+  .hover\:bg-muted:hover { background-color: hsl(var(--muted)); }
+  .hover\:bg-primary:hover { background-color: hsl(var(--primary)); }
+  .hover\:bg-destructive:hover { background-color: hsl(var(--destructive)); }
+
+  /* Opacity variants */
+  .bg-accent\/10 { background-color: hsl(var(--accent) / 0.1); }
+  .bg-accent\/30 { background-color: hsl(var(--accent) / 0.3); }
+  .bg-accent\/50 { background-color: hsl(var(--accent) / 0.5); }
+  .bg-muted\/20 { background-color: hsl(var(--muted) / 0.2); }
+  .bg-muted\/30 { background-color: hsl(var(--muted) / 0.3); }
+  .bg-muted\/50 { background-color: hsl(var(--muted) / 0.5); }
+  .bg-destructive\/10 { background-color: hsl(var(--destructive) / 0.1); }
+  .bg-primary\/90 { background-color: hsl(var(--primary) / 0.9); }
+}

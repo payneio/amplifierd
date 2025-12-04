@@ -120,7 +120,7 @@ export function DirectoryDetailsPanel({
       </div>
 
       {directory.metadata?.description && (
-        <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
+        <div className="mt-4 p-4 bg-accent/50 rounded-lg">
           <div className="text-sm text-muted-foreground leading-relaxed">
             {directory.metadata.description as string}
           </div>
