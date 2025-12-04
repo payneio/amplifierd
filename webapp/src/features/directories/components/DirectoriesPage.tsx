@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, FileText, Settings, Activity } from 'lucide-react';
 import { SessionsList } from './SessionsList';
-import { DirectoryDetailsPanel } from './DirectoryDetailsPanel';
+import { AutomationsSection } from './AutomationsSection';
+import { WorkSection } from './WorkSection';
 import { EditDirectoryDialog } from './EditDirectoryDialog';
 import { CreateDirectoryDialog } from './CreateDirectoryDialog';
+import { AgentInstructionsDialog } from './AgentInstructionsDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useDirectories } from '../hooks/useDirectories';
 import * as api from '@/api';
@@ -17,6 +19,10 @@ export function DirectoriesPage() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showAgentInstructions, setShowAgentInstructions] = useState(false);
+  const [showAutomations, setShowAutomations] = useState(false);
+  const [showWork, setShowWork] = useState(false);
+  const [runningAutomationsCount, setRunningAutomationsCount] = useState(0);
   const [selectedDirectory, setSelectedDirectory] = useState<AmplifiedDirectory | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -109,7 +115,6 @@ export function DirectoriesPage() {
         removeMarker: true,
       });
       setShowDeleteConfirm(false);
-      setShowDetails(false);
       setSearchParams({});
       setSelectedDirectory(null);
     } catch (err) {
@@ -136,19 +141,56 @@ export function DirectoriesPage() {
               <div className="text-muted-foreground">Loading project details...</div>
             </div>
           ) : selectedDirectory ? (
-            <>
-              {/* Project Details Section */}
-              <div>
-                <DirectoryDetailsPanel
-                  directory={selectedDirectory}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
+            <div className="space-y-6">
+              {/* Header with dialog buttons */}
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Sessions</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAgentInstructions(true)}
+                    className="flex items-center gap-2 px-3 py-2 border rounded-md hover:bg-accent text-sm"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Agent Instructions
+                  </button>
+                  <button
+                    onClick={() => setShowAutomations(true)}
+                    className="flex items-center gap-2 px-3 py-2 border rounded-md hover:bg-accent text-sm relative"
+                  >
+                    <Settings className="h-4 w-4" />
+                    Automations
+                    <span className={`absolute -top-1 -right-1 h-5 w-5 rounded-full text-white text-xs flex items-center justify-center font-medium ${runningAutomationsCount > 0 ? 'bg-green-500' : 'bg-gray-400'}`}>
+                      3
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setShowWork(true)}
+                    className="flex items-center gap-2 px-3 py-2 border rounded-md hover:bg-accent text-sm relative"
+                  >
+                    <Activity className="h-4 w-4" />
+                    Work
+                    <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-medium">
+                      2
+                    </span>
+                  </button>
+                  <button
+                    onClick={handleEdit}
+                    className="flex items-center gap-2 px-3 py-2 border rounded-md hover:bg-accent text-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="flex items-center gap-2 px-3 py-2 border border-destructive text-destructive rounded-md hover:bg-destructive hover:text-destructive-foreground text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
-              {/* Sessions Section */}
+              {/* Sessions list inline */}
               <SessionsList directoryPath={selectedPath} />
-            </>
+            </div>
           ) : null}
         </div>
       ) : (
@@ -227,6 +269,37 @@ export function DirectoriesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedDirectory && (
+        <>
+          <AgentInstructionsDialog
+            open={showAgentInstructions}
+            onOpenChange={setShowAgentInstructions}
+            directory={selectedDirectory}
+          />
+
+          <Dialog open={showAutomations} onOpenChange={setShowAutomations}>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Automations</DialogTitle>
+              </DialogHeader>
+              <AutomationsSection
+                directoryPath={selectedPath!}
+                onRunningCountChange={setRunningAutomationsCount}
+              />
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={showWork} onOpenChange={setShowWork}>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Work (7)</DialogTitle>
+              </DialogHeader>
+              <WorkSection directoryPath={selectedPath!} />
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
     </div>
   );
 }
