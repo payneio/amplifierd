@@ -1,4 +1,11 @@
-# Amplifier Education
+# Amplifier EDU
+
+> ## Looking for "Lakehouse"?
+> Lakehouse grew out of this exploration. Further development on Lakehouse is at [payneio/lakehouse](http://github.com/payneio/lakehouse).
+> _This_ repo will be deleted in the near future.
+
+
+## Amplifier Education
 
 This is a repo where I figure out what this amplifier thing is.
 
