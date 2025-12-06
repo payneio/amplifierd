@@ -3,6 +3,7 @@
 Manages streaming infrastructure for a single session including:
 - EventQueueEmitter for multi-subscriber events
 - StreamingHookRegistry for hook events
+- ExecutionTraceHook for persistence
 - ExecutionRunner lifecycle
 """
 
@@ -11,8 +12,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from amplifier_library.execution.runner import ExecutionRunner
+from amplifier_library.storage import get_state_dir
 
 from ..hooks import DEFAULT_STREAMING_HOOKS
+from ..hooks import ExecutionTraceHook
 from ..hooks import StreamingHookRegistry
 from ..streaming import EventQueueEmitter  # type: ignore[attr-defined]
 
@@ -50,6 +53,11 @@ class SessionStreamManager:
             stream_events=DEFAULT_STREAMING_HOOKS,
         )
 
+        # Create execution trace hook for persistence
+        state_dir = get_state_dir()
+        session_dir = state_dir / "sessions" / session_id
+        self.trace_hook = ExecutionTraceHook(session_dir)
+
         # ExecutionRunner (created on-demand)
         self._runner: ExecutionRunner | None = None
         self._runner_initialized = False
@@ -84,9 +92,10 @@ class SessionStreamManager:
             logger.info(f"Created ExecutionRunner for session {self.session_id}")
 
         if not self._runner_initialized:
-            # Initialize runner - this creates AmplifierSession
-            # We'll mount the hook_registry after initialization
-            logger.info(f"Initializing ExecutionRunner for session {self.session_id}")
+            # Initialize runner's session so hooks can be mounted
+            logger.info(f"Initializing AmplifierSession for session {self.session_id}")
+            await self._runner._ensure_session()
+            logger.info(f"AmplifierSession initialized for session {self.session_id}")
             self._runner_initialized = True
 
         return self._runner
@@ -101,7 +110,15 @@ class SessionStreamManager:
             # Replace the default HookRegistry with our StreamingHookRegistry
             runner._session.coordinator.mount_points["hooks"] = self.hook_registry
             runner._session.coordinator.hooks = self.hook_registry
-            logger.info(f"Mounted StreamingHookRegistry for session {self.session_id}")
+
+            # Register execution trace hook for persistence
+            self.hook_registry.register("assistant_message:start", self.trace_hook.on_assistant_message_start)
+            self.hook_registry.register("tool:pre", self.trace_hook.on_tool_pre)
+            self.hook_registry.register("tool:post", self.trace_hook.on_tool_post)
+            self.hook_registry.register("thinking:delta", self.trace_hook.on_thinking_delta)
+            self.hook_registry.register("assistant_message:complete", self.trace_hook.on_assistant_message_complete)
+
+            logger.info(f"Mounted StreamingHookRegistry and ExecutionTraceHook for session {self.session_id}")
 
     def subscribe(self: "SessionStreamManager") -> asyncio.Queue:
         """Create new SSE subscriber queue.

@@ -1,24 +1,21 @@
-import { cn } from '@/lib/utils';
-import { FolderOpen, Home, Package } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router';
-import { DirectoryTreeSidebar } from '@/features/directories/components/DirectoryTreeSidebar';
+import { DirectoryTreeSidebar } from "@/features/directories/components/DirectoryTreeSidebar";
+import { cn } from "@/lib/utils";
+import { FolderOpen, Home, Package } from "lucide-react";
+import { NavLink, Outlet } from "react-router";
 
 export function MainLayout() {
   return (
     <div className="flex h-screen">
       <aside
-        className={cn(
-          "w-64 border-r",
-          "flex flex-col"
-        )}
+        className={cn("w-64 border-r", "flex flex-col")}
         style={{
-          backgroundImage: 'url(/background.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
+          backgroundImage: "url(/background.jpg)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
         }}
       >
         <div className="p-4">
-          <h1 className="text-xl font-bold">Amplifier</h1>
+          <h1 className="text-xl font-bold">Amplifier: Lakehouse</h1>
         </div>
         <nav className="p-4">
           <ul className="space-y-2">
@@ -28,7 +25,9 @@ export function MainLayout() {
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
-                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-gray-200"
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-gray-200"
                   )
                 }
               >
@@ -42,7 +41,9 @@ export function MainLayout() {
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
-                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-gray-200"
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-gray-200"
                   )
                 }
               >
@@ -56,7 +57,9 @@ export function MainLayout() {
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
-                    isActive ? "bg-primary text-primary-foreground" : "hover:bg-gray-200"
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-gray-200"
                   )
                 }
               >
@@ -73,5 +76,5 @@ export function MainLayout() {
         <Outlet />
       </main>
     </div>
-  )
+  );
 }

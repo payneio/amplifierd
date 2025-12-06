@@ -1,0 +1,345 @@
+/**
+ * Execution state management hook
+ *
+ * Manages execution traces for sessions including:
+ * - Tool calls with timing
+ * - Thinking blocks
+ * - Turn lifecycle
+ * - Performance metrics
+ *
+ * Uses refs to avoid re-render issues during high-frequency SSE updates
+ */
+
+import { useRef, useCallback, useMemo, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchApi } from '@/api/client';
+import type {
+  ExecutionState,
+  Turn,
+  ToolCall,
+  ThinkingBlock,
+  SessionMetrics,
+  CurrentActivity,
+} from '../types/execution';
+
+interface ExecutionTraceResponse {
+  turns: Turn[];
+}
+
+interface UseExecutionStateOptions {
+  sessionId: string;
+}
+
+export function useExecutionState({ sessionId }: UseExecutionStateOptions) {
+  console.log('[useExecutionState] Initializing for session:', sessionId);
+
+  // Use ref to avoid re-renders during SSE updates
+  const stateRef = useRef<ExecutionState>({
+    turns: [],
+    currentTurn: null,
+    metrics: {
+      totalTools: 0,
+      totalThinking: 0,
+      avgToolDuration: 0,
+    },
+  });
+
+  // Track whether we've initialized from historical data
+  const initializedRef = useRef(false);
+
+  // Counter to force re-renders when state changes
+  // This allows us to use refs for state (avoiding excessive re-renders during SSE)
+  // while still triggering re-renders when consumers need fresh data
+  const [updateCounter, setUpdateCounter] = useState(0);
+  const forceUpdate = useCallback(() => {
+    setUpdateCounter(c => c + 1);
+  }, []);
+
+  // Load historical trace on session open
+  const { data: historicalTrace } = useQuery({
+    queryKey: ['execution-trace', sessionId],
+    queryFn: () =>
+      fetchApi<ExecutionTraceResponse>(`/api/v1/sessions/${sessionId}/execution-trace`),
+    enabled: !!sessionId,
+    staleTime: Infinity, // Historical data doesn't change
+  });
+
+  // Initialize state with historical trace (in effect, not during render)
+  useEffect(() => {
+    if (historicalTrace?.turns && !initializedRef.current) {
+      stateRef.current.turns = historicalTrace.turns;
+      initializedRef.current = true;
+    }
+  }, [historicalTrace]);
+
+  // Calculate metrics from current state
+  const calculateMetrics = useCallback((): SessionMetrics => {
+    const allTools = stateRef.current.turns.flatMap((t) => t.tools);
+    const completedTools = allTools.filter((t) => t.duration !== undefined);
+    const allThinking = stateRef.current.turns.flatMap((t) => t.thinking);
+
+    const avgDuration =
+      completedTools.length > 0
+        ? completedTools.reduce((sum, t) => sum + (t.duration || 0), 0) / completedTools.length
+        : 0;
+
+    const longest = completedTools.reduce<{ name: string; duration: number } | undefined>(
+      (max, tool) => {
+        if (!tool.duration) return max;
+        if (!max || tool.duration > max.duration) {
+          return { name: tool.name, duration: tool.duration };
+        }
+        return max;
+      },
+      undefined
+    );
+
+    return {
+      totalTools: allTools.length,
+      totalThinking: allThinking.length,
+      avgToolDuration: avgDuration,
+      longestTool: longest,
+    };
+  }, []);
+
+  // Start new turn
+  const startTurn = useCallback((userMessage: string) => {
+    console.log('[useExecutionState] Starting turn with message:', userMessage);
+    const turn: Turn = {
+      id: crypto.randomUUID(),
+      userMessage,
+      assistantMessageId: null,
+      status: 'active',
+      tools: [],
+      thinking: [],
+      startTime: Date.now(),
+    };
+
+    stateRef.current.currentTurn = turn;
+    stateRef.current.turns.push(turn);
+    console.log('[useExecutionState] Current turns count:', stateRef.current.turns.length);
+    forceUpdate();
+  }, [forceUpdate]);
+
+  // Complete current turn
+  const completeTurn = useCallback(() => {
+    if (stateRef.current.currentTurn) {
+      stateRef.current.currentTurn.status = 'completed';
+      stateRef.current.currentTurn.endTime = Date.now();
+      stateRef.current.currentTurn = null;
+      stateRef.current.metrics = calculateMetrics();
+      forceUpdate();
+    }
+  }, [calculateMetrics, forceUpdate]);
+
+  // Add tool to current turn
+  const addTool = useCallback(
+    (toolName: string, toolInput?: Record<string, unknown>, parallelGroupId?: string) => {
+      console.log('[useExecutionState] addTool called with:', {
+        toolName,
+        toolInput,
+        parallelGroupId
+      });
+
+      if (!stateRef.current.currentTurn) {
+        console.warn('[useExecutionState] No current turn when adding tool');
+        return;
+      }
+
+      // Detect sub-agent calls
+      const isSubAgent = toolName === 'Task';
+      const subAgentName = isSubAgent ? (toolInput?.subagent_type as string) : undefined;
+
+      const tool: ToolCall = {
+        id: crypto.randomUUID(),
+        name: toolName,
+        parallelGroupId,
+        status: 'starting',
+        startTime: Date.now(),
+        arguments: toolInput,
+        isSubAgent,
+        subAgentName,
+      };
+
+      console.log('[useExecutionState] Created tool object:', tool);
+
+      stateRef.current.currentTurn.tools.push(tool);
+
+      console.log('[useExecutionState] Tool added. Current turn state:', {
+        toolCount: stateRef.current.currentTurn.tools.length,
+        tools: stateRef.current.currentTurn.tools.map(t => ({
+          id: t.id,
+          name: t.name,
+          parallelGroupId: t.parallelGroupId,
+          status: t.status
+        }))
+      });
+
+      // Trigger re-render
+      forceUpdate();
+    },
+    [forceUpdate]
+  );
+
+  // Update tool status
+  const updateTool = useCallback(
+    (toolName: string, parallelGroupId: string | undefined, updates: Partial<ToolCall>) => {
+      console.log('[useExecutionState] updateTool called with:', {
+        toolName,
+        parallelGroupId,
+        updates
+      });
+
+      if (!stateRef.current.currentTurn) {
+        console.warn('[useExecutionState] No current turn when updating tool');
+        return;
+      }
+
+      // Match by tool name + parallel group ID (and only unfinished tools)
+      const tool = stateRef.current.currentTurn.tools.find((t) => {
+        const nameMatches = t.name === toolName;
+        const groupMatches = parallelGroupId
+          ? t.parallelGroupId === parallelGroupId
+          : true; // If no parallelGroupId, match by name only
+        const isUnfinished = t.status === 'starting' || t.status === 'running';
+
+        return nameMatches && groupMatches && isUnfinished;
+      });
+
+      if (tool) {
+        console.log('[useExecutionState] Tool BEFORE update:', {
+          id: tool.id,
+          name: tool.name,
+          parallelGroupId: tool.parallelGroupId,
+          status: tool.status,
+          result: tool.result,
+          duration: tool.duration
+        });
+
+        console.log('[useExecutionState] Setting result to:', updates.result);
+        console.log('[useExecutionState] Result type:', typeof updates.result);
+
+        Object.assign(tool, updates);
+
+        // Calculate duration if endTime is set
+        if (updates.endTime) {
+          tool.duration = updates.endTime - tool.startTime;
+        }
+
+        console.log('[useExecutionState] Tool AFTER update:', {
+          id: tool.id,
+          name: tool.name,
+          parallelGroupId: tool.parallelGroupId,
+          status: tool.status,
+          result: tool.result,
+          duration: tool.duration
+        });
+
+        console.log('[useExecutionState] Tool.result after update:', tool.result);
+
+        // Update metrics if tool completed
+        if (updates.status === 'completed' || updates.status === 'error') {
+          stateRef.current.metrics = calculateMetrics();
+        }
+
+        // Trigger re-render
+        forceUpdate();
+      } else {
+        console.warn('[useExecutionState] Tool not found with name:', toolName, 'parallelGroupId:', parallelGroupId);
+        console.warn('[useExecutionState] Available tools:', stateRef.current.currentTurn.tools.map(t => ({
+          id: t.id,
+          name: t.name,
+          parallelGroupId: t.parallelGroupId,
+          status: t.status
+        })));
+      }
+    },
+    [calculateMetrics, forceUpdate]
+  );
+
+  // Add thinking block to current turn
+  const addThinking = useCallback((content: string) => {
+    if (!stateRef.current.currentTurn) return;
+
+    const thinking: ThinkingBlock = {
+      id: crypto.randomUUID(),
+      content,
+      timestamp: Date.now(),
+    };
+
+    stateRef.current.currentTurn.thinking.push(thinking);
+    stateRef.current.metrics = calculateMetrics();
+    forceUpdate();
+  }, [calculateMetrics, forceUpdate]);
+
+  // Get current activity (for inline display)
+  const getCurrentActivity = useCallback((): CurrentActivity | null => {
+    const currentTurn = stateRef.current.currentTurn;
+    console.log('[getCurrentActivity] Current turn:', currentTurn ? {
+      id: currentTurn.id,
+      status: currentTurn.status,
+      toolsCount: currentTurn.tools.length,
+      tools: currentTurn.tools.map(t => ({
+        id: t.id,
+        name: t.name,
+        status: t.status
+      }))
+    } : null);
+
+    if (!currentTurn) return null;
+
+    // Check for active tool
+    const activeTool = currentTurn.tools.find(
+      (t) => t.status === 'starting' || t.status === 'running'
+    );
+
+    console.log('[getCurrentActivity] Active tool:', activeTool ? {
+      id: activeTool.id,
+      name: activeTool.name,
+      status: activeTool.status,
+      isSubAgent: activeTool.isSubAgent
+    } : null);
+
+    if (activeTool) {
+      if (activeTool.isSubAgent) {
+        return {
+          type: 'subagent',
+          subAgentName: activeTool.subAgentName,
+          toolName: activeTool.name,
+          args: activeTool.arguments,
+        };
+      }
+      return {
+        type: 'tool',
+        toolName: activeTool.name,
+        args: activeTool.arguments,
+      };
+    }
+
+    // Check for recent thinking
+    if (currentTurn.thinking.length > 0) {
+      return { type: 'thinking' };
+    }
+
+    return null;
+  }, []);
+
+  // Get current state (safe getter function)
+  // Include updateCounter in dependency so this returns fresh state reference
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const getState = useCallback(() => stateRef.current, [updateCounter]);
+
+  // Return stable API using useMemo
+  return useMemo(
+    () => ({
+      getState,
+      startTurn,
+      completeTurn,
+      addTool,
+      updateTool,
+      addThinking,
+      getCurrentActivity,
+    }),
+    [getState, startTurn, completeTurn, addTool, updateTool, addThinking, getCurrentActivity]
+  );
+}

@@ -23,6 +23,7 @@ dependencies = [
     "requests>=2.32.4",
     "aiohttp>=3.13.2",
     "anthropic>=0.75.0",
+    "bs4>=0.0.2",
 ]
 
 [tool.setuptools.packages.find]

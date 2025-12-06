@@ -11,6 +11,8 @@ from typing import Optional
 from amplifier_core.hooks import HookRegistry
 from amplifier_core.hooks import HookResult
 
+from .execution_trace import ExecutionTraceHook
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_STREAMING_HOOKS = {
@@ -22,7 +24,11 @@ DEFAULT_STREAMING_HOOKS = {
     "approval:required",
     "approval:granted",
     "approval:denied",
+    "assistant_message:start",
+    "assistant_message:complete",
 }
+
+__all__ = ["StreamingHookRegistry", "ExecutionTraceHook", "DEFAULT_STREAMING_HOOKS"]
 
 
 class StreamingHookRegistry(HookRegistry):
@@ -67,8 +73,13 @@ class StreamingHookRegistry(HookRegistry):
         Returns:
             HookResult from registered handlers
         """
+        logger.info(
+            f"[StreamingHookRegistry] Emitting event: {event}, has_emitter: {self.sse_emitter is not None}, in_stream_events: {event in self.stream_events}"
+        )
+
         if self.sse_emitter and event in self.stream_events:
             try:
+                logger.info(f"[StreamingHookRegistry] Sending SSE event: hook:{event}")
                 await self.sse_emitter.emit(
                     event_type=f"hook:{event}",
                     data={
@@ -77,6 +88,7 @@ class StreamingHookRegistry(HookRegistry):
                         "phase": "start",
                     },
                 )
+                logger.info(f"[StreamingHookRegistry] SSE event sent successfully: hook:{event}")
             except Exception as e:
                 logger.error(f"Failed to emit SSE event for hook {event}: {e}")
 

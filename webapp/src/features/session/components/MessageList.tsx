@@ -2,14 +2,24 @@ import { useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { SessionMessage } from '@/types/api';
+import type { CurrentActivity, ThinkingBlock } from '@/features/session/types/execution';
 import { User, Bot } from 'lucide-react';
+import { CurrentActivityIndicator } from './CurrentActivityIndicator';
+import { ThinkingViewer } from './ThinkingViewer';
 
 interface MessageListProps {
   messages: SessionMessage[];
   streamingContent?: string;
+  currentActivity?: CurrentActivity | null;
+  currentTurnThinking?: ThinkingBlock[];
 }
 
-export function MessageList({ messages, streamingContent }: MessageListProps) {
+export function MessageList({
+  messages,
+  streamingContent,
+  currentActivity,
+  currentTurnThinking = []
+}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,7 +55,7 @@ export function MessageList({ messages, streamingContent }: MessageListProps) {
                   : 'bg-muted'
               }`}
             >
-              <div className="prose prose-sm dark:prose-invert max-w-none">
+              <div className={isUser ? '' : 'prose prose-sm dark:prose-invert max-w-none'}>
                 {isUser ? (
                   <div className="whitespace-pre-wrap break-words">{message.content}</div>
                 ) : (
@@ -73,13 +83,36 @@ export function MessageList({ messages, streamingContent }: MessageListProps) {
           <div className="shrink-0 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
             <Bot className="h-4 w-4 text-primary animate-pulse" />
           </div>
-          <div className="max-w-[80%] rounded-lg p-3 bg-muted">
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {streamingContent}
-              </ReactMarkdown>
+          <div className="max-w-[80%] space-y-2">
+            <div className="rounded-lg p-3 bg-muted">
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {streamingContent}
+                </ReactMarkdown>
+              </div>
+              <div className="text-xs opacity-70 mt-1">Streaming...</div>
             </div>
-            <div className="text-xs opacity-70 mt-1">Streaming...</div>
+
+            {/* Show thinking blocks if present */}
+            {currentTurnThinking.length > 0 && (
+              <ThinkingViewer
+                thinking={currentTurnThinking}
+                inline={true}
+                defaultExpanded={false}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Show current activity indicator (even when not streaming) */}
+      {currentActivity && !streamingContent && (
+        <div className="flex gap-3 justify-start">
+          <div className="shrink-0 h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <Bot className="h-4 w-4 text-primary animate-pulse" />
+          </div>
+          <div className="max-w-[80%]">
+            <CurrentActivityIndicator activity={currentActivity} />
           </div>
         </div>
       )}

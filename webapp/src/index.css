@@ -1,6 +1,34 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @layer base {
+  /* Accordion animations */
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+
+  .animate-accordion-down {
+    animation: accordion-down 0.2s ease-out;
+  }
+
+  .animate-accordion-up {
+    animation: accordion-up 0.2s ease-out;
+  }
+
   :root {
     /* Background Colors */
     --background: 0 0% 100%;           /* white */
@@ -99,4 +127,27 @@
   .bg-muted\/50 { background-color: hsl(var(--muted) / 0.5); }
   .bg-destructive\/10 { background-color: hsl(var(--destructive) / 0.1); }
   .bg-primary\/90 { background-color: hsl(var(--primary) / 0.9); }
+
+  /* Custom prose styling for better contrast on muted background */
+  .prose {
+    --tw-prose-body: hsl(222.2 47% 11%);
+    --tw-prose-headings: hsl(222.2 84% 5%);
+    --tw-prose-bold: hsl(222.2 84% 5%);
+    --tw-prose-links: hsl(221 83% 53%);
+    --tw-prose-code: hsl(222.2 47% 11%);
+    --tw-prose-quotes: hsl(222.2 47% 11%);
+    --tw-prose-bullets: hsl(222.2 47% 11%);
+    --tw-prose-counters: hsl(222.2 47% 11%);
+  }
+
+  .dark .prose {
+    --tw-prose-body: hsl(210 40% 98%);
+    --tw-prose-headings: hsl(210 40% 98%);
+    --tw-prose-bold: hsl(210 40% 98%);
+    --tw-prose-links: hsl(217 91% 60%);
+    --tw-prose-code: hsl(210 40% 98%);
+    --tw-prose-quotes: hsl(210 40% 85%);
+    --tw-prose-bullets: hsl(210 40% 85%);
+    --tw-prose-counters: hsl(210 40% 85%);
+  }
 }

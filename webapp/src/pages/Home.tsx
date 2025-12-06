@@ -1,27 +1,38 @@
-import { BASE_URL } from '@/api/client';
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
-import { FolderPlus, MessageSquare, Users, FolderOpen, Settings, BookOpen, Workflow, ArrowRight } from 'lucide-react';
+import { BASE_URL } from "@/api/client";
+import {
+  ArrowRight,
+  BookOpen,
+  FolderOpen,
+  FolderPlus,
+  MessageSquare,
+  Settings,
+  Users,
+  Workflow,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
 export function HomePage() {
-  const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'error'>('checking');
-  const [apiVersion, setApiVersion] = useState<string>('');
-  const [dataPath, setDataPath] = useState<string>('');
+  const [apiStatus, setApiStatus] = useState<
+    "checking" | "connected" | "error"
+  >("checking");
+  const [apiVersion, setApiVersion] = useState<string>("");
+  const [dataPath, setDataPath] = useState<string>("");
 
   useEffect(() => {
     // Check API connection on mount
     const checkConnection = async () => {
       try {
         const response = await fetch(`${BASE_URL}/api/v1/status`, {
-          mode: 'cors',
+          mode: "cors",
         });
 
         const data = await response.json();
-        setApiStatus('connected');
-        setApiVersion(data.version || 'unknown');
-        setDataPath(data.rootDir || '');
+        setApiStatus("connected");
+        setApiVersion(data.version || "unknown");
+        setDataPath(data.rootDir || "");
       } catch {
-        setApiStatus('error');
+        setApiStatus("error");
       }
     };
 
@@ -33,10 +44,11 @@ export function HomePage() {
       {/* Hero Section */}
       <section className="py-16 px-8 max-w-7xl mx-auto">
         <div className="text-center space-y-6">
-          <h1 className="text-5xl font-bold">Your Intelligent Computation Platform</h1>
+          <h1 className="text-5xl font-bold">Amplifier: Lakehouse</h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            ACP works directly on your data, building custom tools and workflows on the fly.
-            No apps, no limits—just you and your computer, working together.
+            Your Intelligent Computation Platform. Works directly on your data,
+            building custom tools and workflows on the fly. No apps, no
+            limits—just you and your computer, working together.
           </p>
 
           {/* Status Indicator */}
@@ -87,7 +99,9 @@ export function HomePage() {
 
       {/* Key Concepts Section */}
       <section className="py-16 px-8 max-w-7xl mx-auto bg-muted/30">
-        <h2 className="text-3xl font-semibold text-center mb-12">Four Core Concepts</h2>
+        <h2 className="text-3xl font-semibold text-center mb-12">
+          Four Core Concepts
+        </h2>
         <div className="grid md:grid-cols-2 gap-6">
           <ConceptCard
             title="Your Data, Your Control"
@@ -153,13 +167,13 @@ export function HomePage() {
         </div>
       </section>
     </div>
-  )
+  );
 }
 
 // Sub-components following "bricks and studs" philosophy
 
 interface StatusIndicatorProps {
-  status: 'checking' | 'connected' | 'error';
+  status: "checking" | "connected" | "error";
   version: string;
   dataPath: string;
 }
@@ -167,24 +181,32 @@ interface StatusIndicatorProps {
 function StatusIndicator({ status, version, dataPath }: StatusIndicatorProps) {
   const getStatusColor = () => {
     switch (status) {
-      case 'connected': return 'bg-green-100 text-green-800 border-green-300';
-      case 'error': return 'bg-red-100 text-red-800 border-red-300';
-      default: return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+      case "connected":
+        return "bg-green-100 text-green-800 border-green-300";
+      case "error":
+        return "bg-red-100 text-red-800 border-red-300";
+      default:
+        return "bg-yellow-100 text-yellow-800 border-yellow-300";
     }
   };
 
   const getStatusText = () => {
     switch (status) {
-      case 'connected': return 'Connected';
-      case 'error': return 'Disconnected';
-      default: return 'Checking...';
+      case "connected":
+        return "Connected";
+      case "error":
+        return "Disconnected";
+      default:
+        return "Checking...";
     }
   };
 
   return (
     <div className="inline-flex items-center gap-4 px-6 py-3 border rounded-lg bg-background">
       <div className="flex items-center gap-2">
-        <div className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor()}`}>
+        <div
+          className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor()}`}
+        >
           {getStatusText()}
         </div>
       </div>
@@ -198,7 +220,7 @@ function StatusIndicator({ status, version, dataPath }: StatusIndicatorProps) {
           {dataPath}
         </div>
       )}
-      {status === 'error' && (
+      {status === "error" && (
         <div className="text-xs text-destructive border-l pl-4">
           Cannot connect to daemon
         </div>
@@ -221,9 +243,7 @@ function StepCard({ step, title, description, icon }: StepCardProps) {
         {step}
       </div>
       <div className="flex items-center gap-3 mb-3">
-        <div className="text-primary">
-          {icon}
-        </div>
+        <div className="text-primary">{icon}</div>
         <h3 className="text-xl font-semibold">{title}</h3>
       </div>
       <p className="text-muted-foreground">{description}</p>
@@ -240,13 +260,18 @@ interface ConceptCardProps {
   isPlaceholder?: boolean;
 }
 
-function ConceptCard({ title, description, icon, linkText, linkTo, isPlaceholder }: ConceptCardProps) {
+function ConceptCard({
+  title,
+  description,
+  icon,
+  linkText,
+  linkTo,
+  isPlaceholder,
+}: ConceptCardProps) {
   return (
     <div className="p-6 border rounded-lg bg-background hover:border-primary/50 transition-colors">
       <div className="flex items-start gap-4 mb-4">
-        <div className="text-primary">
-          {icon}
-        </div>
+        <div className="text-primary">{icon}</div>
         <div>
           <h3 className="text-xl font-semibold mb-2">{title}</h3>
           <p className="text-muted-foreground">{description}</p>
@@ -287,7 +312,7 @@ function ResourceLink({ icon, title, href, isPlaceholder }: ResourceLinkProps) {
     );
   }
 
-  const isExternal = href.startsWith('http');
+  const isExternal = href.startsWith("http");
 
   if (isExternal) {
     return (

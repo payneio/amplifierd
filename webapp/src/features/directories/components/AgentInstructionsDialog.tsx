@@ -13,14 +13,17 @@ interface AgentInstructionsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   directory: AmplifiedDirectory;
+  onSaveSuccess?: () => void;
 }
 
 function AgentInstructionsForm({
   directory,
   onClose,
+  onSaveSuccess,
 }: {
   directory: AmplifiedDirectory;
   onClose: () => void;
+  onSaveSuccess?: () => void;
 }) {
   const [editedContent, setEditedContent] = useState(
     directory.agents_content || ""
@@ -55,6 +58,7 @@ function AgentInstructionsForm({
       });
 
       setSaveStatus("success");
+      onSaveSuccess?.(); // Notify parent to refetch directory data
 
       // Auto-close after successful save
       setTimeout(() => {
@@ -123,6 +127,7 @@ export function AgentInstructionsDialog({
   open,
   onOpenChange,
   directory,
+  onSaveSuccess,
 }: AgentInstructionsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -133,6 +138,7 @@ export function AgentInstructionsDialog({
             key={directory.relative_path}
             directory={directory}
             onClose={() => onOpenChange(false)}
+            onSaveSuccess={onSaveSuccess}
           />
         )}
       </DialogContent>

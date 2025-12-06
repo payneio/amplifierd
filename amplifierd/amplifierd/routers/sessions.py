@@ -727,6 +727,92 @@ async def get_session_mount_plan(
         raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
+@router.get("/{session_id}/execution-trace")
+async def get_execution_trace(
+    session_id: str,
+    service: Annotated[SessionStateService, Depends(get_session_state_service)],
+) -> dict[str, list[dict]]:
+    """Load execution trace for session.
+
+    Retrieves complete execution history including:
+    - Tool invocations with timing and results
+    - Thinking blocks
+    - Sub-agent calls
+    - Turn status and errors
+
+    Args:
+        session_id: Session identifier
+        service: Session state service dependency
+
+    Returns:
+        Dictionary with "turns" key containing list of execution turns
+
+    Raises:
+        HTTPException:
+            - 404 if session not found
+            - 500 for file read errors
+
+    Example Response:
+        ```json
+        {
+            "turns": [
+                {
+                    "turn_id": "abc123",
+                    "user_message": "List files",
+                    "status": "completed",
+                    "start_time": "2024-01-15T10:30:00.000Z",
+                    "end_time": "2024-01-15T10:30:02.500Z",
+                    "duration_ms": 2500.0,
+                    "tools": [
+                        {
+                            "id": "call_1",
+                            "name": "Bash",
+                            "status": "completed",
+                            "duration_ms": 150.0,
+                            "result": "file1.txt\nfile2.txt"
+                        }
+                    ],
+                    "thinking": []
+                }
+            ]
+        }
+        ```
+    """
+    try:
+        # Check session exists
+        if service.get_session(session_id) is None:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        # Load execution trace from session directory
+        state_dir = get_state_dir()
+        trace_file = state_dir / "sessions" / session_id / "execution_trace.jsonl"
+
+        # Return empty turns if file doesn't exist yet
+        if not trace_file.exists():
+            return {"turns": []}
+
+        # Parse JSONL file
+        turns = []
+        with open(trace_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        turn = json.loads(line)
+                        turns.append(turn)
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Skipping malformed line in trace file: {e}")
+                        continue
+
+        return {"turns": turns}
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to load execution trace for {session_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc
+
+
 @router.post("/{session_id}/change-profile", response_model=SessionMetadata)
 async def change_session_profile(
     session_id: str,

@@ -276,6 +276,12 @@ export function DirectoriesPage() {
             open={showAgentInstructions}
             onOpenChange={setShowAgentInstructions}
             directory={selectedDirectory}
+            onSaveSuccess={async () => {
+              if (selectedPath) {
+                const updated = await api.getDirectory(selectedPath);
+                setSelectedDirectory(updated);
+              }
+            }}
           />
 
           <Dialog open={showAutomations} onOpenChange={setShowAutomations}>

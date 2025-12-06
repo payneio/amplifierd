@@ -3,9 +3,18 @@ import { BASE_URL } from '@/api/client';
 
 type EventHandler = (data: unknown) => void;
 
+interface ExecutionStateHandlers {
+  startTurn: (userMessage: string) => void;
+  completeTurn: () => void;
+  addTool: (toolName: string, toolInput?: Record<string, unknown>, toolCallId?: string) => void;
+  updateTool: (toolCallId: string, updates: { status?: string; endTime?: number; result?: unknown; error?: string }) => void;
+  addThinking: (content: string) => void;
+}
+
 interface UseEventStreamOptions {
   sessionId: string;
   onError?: (error: Error) => void;
+  executionHandlers?: ExecutionStateHandlers;
 }
 
 interface EventStreamState {
@@ -13,7 +22,7 @@ interface EventStreamState {
   error?: Error;
 }
 
-export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
+export function useEventStream({ sessionId, onError, executionHandlers }: UseEventStreamOptions) {
   // All hooks at top level - unconditionally
   const handlersRef = useRef<Map<string, Set<EventHandler>>>(new Map());
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -83,11 +92,112 @@ export function useEventStream({ sessionId, onError }: UseEventStreamOptions) {
       eventSource.addEventListener(eventName, (event) => {
         try {
           const parsed = JSON.parse(event.data);
+
+          // Integrate with execution state tracking
+          if (executionHandlers) {
+            handleExecutionEvent(eventName, parsed);
+          }
+
           emit(eventName, parsed);
         } catch (error) {
           console.error(`Error parsing ${eventName} event:`, error);
         }
       });
+    };
+
+    // Handle execution state updates from SSE events
+    const handleExecutionEvent = (eventName: string, data: Record<string, unknown>) => {
+      if (!executionHandlers) return;
+
+      // Log the full event data for debugging
+      console.log('[useEventStream] Event:', eventName, 'Data:', JSON.stringify(data, null, 2));
+
+      switch (eventName) {
+        case 'assistant_message_start':
+          // Start new turn with last user message
+          // Note: We'll need to track the last user message separately
+          executionHandlers.startTurn((data.user_message as string) || '');
+          break;
+
+        case 'hook:tool:pre': {
+          // Log the complete raw event
+          console.log('[useEventStream] RAW tool:pre event:', JSON.stringify(data, null, 2));
+
+          // Extract tool data from hook_data wrapper
+          const hookData = data.hook_data as Record<string, unknown> | undefined;
+          if (!hookData) {
+            console.warn('[useEventStream] Missing hook_data in tool:pre event');
+            console.log('[useEventStream] Full event data:', data);
+            break;
+          }
+
+          const tool_name = hookData.tool_name as string;
+          const tool_input = hookData.tool_input as Record<string, unknown>;
+          const tool_call_id = hookData.tool_call_id as string;
+
+          console.log('[useEventStream] Extracted tool data:', {
+            tool_name,
+            tool_input,
+            tool_call_id,
+            hookData_keys: Object.keys(hookData)
+          });
+
+          // Add tool to current turn
+          executionHandlers.addTool(tool_name, tool_input, tool_call_id);
+          break;
+        }
+
+        case 'hook:tool:post': {
+          // Log the complete raw event
+          console.log('[useEventStream] RAW tool:post event:', JSON.stringify(data, null, 2));
+
+          // Extract tool data from hook_data wrapper
+          const hookData = data.hook_data as Record<string, unknown> | undefined;
+          if (!hookData) {
+            console.warn('[useEventStream] Missing hook_data in tool:post event');
+            console.log('[useEventStream] Full event data:', data);
+            break;
+          }
+
+          const tool_call_id = hookData.tool_call_id as string;
+          const is_error = hookData.is_error as boolean;
+          const tool_result = hookData.tool_result;
+
+          console.log('[useEventStream] Extracted tool completion:', {
+            tool_call_id,
+            is_error,
+            result_preview: typeof tool_result === 'string' ? tool_result.substring(0, 100) : tool_result,
+            hookData_keys: Object.keys(hookData)
+          });
+
+          // Update tool with completion data
+          executionHandlers.updateTool(tool_call_id, {
+            status: is_error ? 'error' : 'completed',
+            endTime: Date.now(),
+            result: tool_result,
+            error: is_error ? String(tool_result) : undefined,
+          });
+          break;
+        }
+
+        case 'hook:thinking:delta': {
+          // Extract thinking data from hook_data wrapper
+          const hookData = data.hook_data as Record<string, unknown> | undefined;
+          if (!hookData) {
+            console.warn('[useEventStream] Missing hook_data in thinking:delta event');
+            break;
+          }
+
+          // Add thinking block
+          executionHandlers.addThinking(hookData.delta as string);
+          break;
+        }
+
+        case 'assistant_message_complete':
+          // Complete current turn
+          executionHandlers.completeTurn();
+          break;
+      }
     };
 
     // Register listeners for known named events
