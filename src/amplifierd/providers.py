@@ -53,14 +53,20 @@ def load_provider_config(home: Path | None = None) -> list[dict[str, Any]]:
 
 
 def expand_env_vars(value: Any) -> Any:
-    """Recursively expand ${VAR} and ${VAR:default} references in config values."""
+    """Recursively expand ${VAR} and ${VAR:default} references in config values.
+
+    After expansion, dict entries whose values are empty strings are removed.
+    This prevents empty env vars (e.g. ANTHROPIC_BASE_URL='') from overriding
+    provider defaults with blank values.
+    """
     if isinstance(value, str):
         return _ENV_PATTERN.sub(
             lambda m: os.environ.get(m.group(1), m.group(2) if m.group(2) is not None else ""),
             value,
         )
     if isinstance(value, dict):
-        return {k: expand_env_vars(v) for k, v in value.items()}
+        expanded = {k: expand_env_vars(v) for k, v in value.items()}
+        return {k: v for k, v in expanded.items() if v != ""}
     if isinstance(value, list):
         return [expand_env_vars(item) for item in value]
     return value
