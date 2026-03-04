@@ -10,7 +10,7 @@ from pydantic import BaseModel
 class CreateSessionRequest(BaseModel):
     """Request to create a new session."""
 
-    bundle: str | None = None
+    bundle_name: str | None = None
     bundle_uri: str | None = None
     session_id: str | None = None
     parent_id: str | None = None

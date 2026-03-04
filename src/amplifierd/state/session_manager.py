@@ -28,10 +28,12 @@ class SessionManager:
         *,
         event_bus: EventBus,
         settings: DaemonSettings,
+        bundle_registry: Any = None,
     ) -> None:
         self._sessions: dict[str, SessionHandle] = {}
         self._event_bus = event_bus
         self._settings = settings
+        self._bundle_registry = bundle_registry
 
     @property
     def event_bus(self) -> EventBus:
@@ -83,6 +85,45 @@ class SessionManager:
     def list_sessions(self) -> list[SessionHandle]:
         """List all live sessions."""
         return list(self._sessions.values())
+
+    async def create(
+        self,
+        *,
+        bundle_name: str | None = None,
+        bundle_uri: str | None = None,
+        working_dir: str | None = None,
+    ) -> SessionHandle:
+        """Create a new session by loading and preparing a bundle.
+
+        Args:
+            bundle_name: Registered bundle name to load.
+            bundle_uri: Bundle URI to load directly.
+            working_dir: Working directory override; falls back to daemon config or home.
+
+        Returns:
+            The newly created and registered SessionHandle.
+
+        Raises:
+            RuntimeError: If BundleRegistry is not available.
+            ValueError: If neither bundle_name nor bundle_uri is provided.
+        """
+        if not self._bundle_registry:
+            raise RuntimeError("BundleRegistry not available")
+        if not bundle_name and not bundle_uri:
+            raise ValueError("bundle_name or bundle_uri required")
+
+        wd = self.resolve_working_dir(working_dir)
+        name_or_uri = bundle_uri or bundle_name
+        bundle = await self._bundle_registry.load(name_or_uri)
+        prepared = await bundle.prepare()
+        session = prepared.create_session()
+        handle = self.register(
+            session=session,
+            prepared_bundle=prepared,
+            bundle_name=bundle_name or bundle_uri or "unknown",
+            working_dir=wd,
+        )
+        return handle
 
     async def destroy(self, session_id: str) -> None:
         """Destroy a session: cleanup resources and remove from registry."""

@@ -13,6 +13,7 @@ from amplifierd.models.errors import ErrorTypeURI, ProblemDetail
 from amplifierd.models.sessions import (
     CancelRequest,
     CancelResponse,
+    CreateSessionRequest,
     ExecuteRequest,
     ExecuteResponse,
     ExecuteStreamAccepted,
@@ -26,6 +27,7 @@ from amplifierd.models.sessions import (
     StaleResponse,
 )
 from amplifierd.state.session_handle import SessionHandle, SessionStatus
+from amplifierd.state.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,76 @@ def _summarize(handle: SessionHandle) -> SessionSummary:
 # ------------------------------------------------------------------
 # CRUD endpoints
 # ------------------------------------------------------------------
+
+
+@sessions_router.post("", status_code=201)
+async def create_session(request: Request, body: CreateSessionRequest) -> dict:
+    """Create a new session by loading and preparing a bundle."""
+    manager: SessionManager = request.app.state.session_manager
+    registry = getattr(request.app.state, "bundle_registry", None)
+    if registry is None:
+        detail = ProblemDetail(
+            type=ErrorTypeURI.BUNDLE_ERROR,
+            title="Bundle Registry Unavailable",
+            status=503,
+            detail="Bundle registry is not available; cannot create session",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=detail.model_dump(exclude_none=True),
+        )
+    if not body.bundle_name and not body.bundle_uri:
+        detail = ProblemDetail(
+            type=ErrorTypeURI.INVALID_REQUEST,
+            title="Invalid Request",
+            status=400,
+            detail="bundle_name or bundle_uri is required",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=detail.model_dump(exclude_none=True),
+        )
+    try:
+        handle = await manager.create(
+            bundle_name=body.bundle_name,
+            bundle_uri=body.bundle_uri,
+            working_dir=body.working_dir,
+        )
+    except ValueError as exc:
+        logger.warning("Invalid session creation request: %s", exc)
+        detail = ProblemDetail(
+            type=ErrorTypeURI.INVALID_REQUEST,
+            title="Invalid Request",
+            status=400,
+            detail=str(exc),
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=detail.model_dump(exclude_none=True),
+        ) from exc
+    except Exception as exc:
+        logger.exception("Failed to create session")
+        detail = ProblemDetail(
+            type=ErrorTypeURI.BUNDLE_LOAD_ERROR,
+            title="Session Creation Failed",
+            status=502,
+            detail=f"Failed to create session: {exc}",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=detail.model_dump(exclude_none=True),
+        ) from exc
+    return {
+        "session_id": handle.session_id,
+        "status": str(handle.status),
+        "bundle_name": handle.bundle_name,
+        "working_dir": handle.working_dir,
+        "created_at": handle.created_at.isoformat(),
+    }
 
 
 @sessions_router.get("", response_model=SessionListResponse)

@@ -32,11 +32,6 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     app.state.event_bus = EventBus()
 
-    app.state.session_manager = SessionManager(
-        event_bus=app.state.event_bus,
-        settings=settings,
-    )
-
     # BundleRegistry — resilient: catches all exceptions, starts without registry
     try:
         from amplifier_foundation import BundleRegistry
@@ -45,6 +40,12 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     except Exception:
         logger.warning("Failed to create BundleRegistry; starting without it")
         app.state.bundle_registry = None
+
+    app.state.session_manager = SessionManager(
+        event_bus=app.state.event_bus,
+        settings=settings,
+        bundle_registry=app.state.bundle_registry,
+    )
 
     # Plugin discovery — resilient
     try:

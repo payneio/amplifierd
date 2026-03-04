@@ -151,7 +151,7 @@ class TestSessionModels:
     def test_create_session_minimal(self) -> None:
         """CreateSessionRequest with no fields (all optional)."""
         req = CreateSessionRequest()
-        assert req.bundle is None
+        assert req.bundle_name is None
         assert req.bundle_uri is None
         assert req.session_id is None
         assert req.parent_id is None
@@ -161,14 +161,14 @@ class TestSessionModels:
     def test_create_session_full(self) -> None:
         """CreateSessionRequest with all fields populated."""
         req = CreateSessionRequest(
-            bundle="my-bundle",
+            bundle_name="my-bundle",
             bundle_uri="https://example.com/bundle",
             session_id="sess-123",
             parent_id="parent-456",
             working_dir="/tmp/work",
             config_overrides={"key": "value"},
         )
-        assert req.bundle == "my-bundle"
+        assert req.bundle_name == "my-bundle"
         assert req.bundle_uri == "https://example.com/bundle"
         assert req.session_id == "sess-123"
         assert req.parent_id == "parent-456"
