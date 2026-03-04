@@ -29,16 +29,48 @@ def main() -> None:
     type=click.Choice(["debug", "info", "warning", "error"], case_sensitive=False),
     help="Log level (overrides AMPLIFIERD_LOG_LEVEL).",
 )
+@click.option(
+    "--bundle",
+    "-b",
+    multiple=True,
+    help="Register a bundle as NAME=URI (repeatable).",
+)
+@click.option(
+    "--default-bundle",
+    default=None,
+    type=str,
+    help="Default bundle name for sessions created without one.",
+)
 def serve(
     host: str | None,
     port: int | None,
     reload: bool,
     log_level: str | None,
+    bundle: tuple[str, ...],
+    default_bundle: str | None,
 ) -> None:
     """Start the amplifierd HTTP server."""
+    import json
+    import os
+
     import uvicorn
 
     from amplifierd.config import DaemonSettings
+
+    # Push CLI bundle overrides into env so DaemonSettings in the lifespan picks them up
+    if bundle:
+        parsed: dict[str, str] = {}
+        for b in bundle:
+            if "=" not in b:
+                raise click.BadParameter(f"Expected NAME=URI, got: {b}", param_hint="--bundle")
+            name, uri = b.split("=", 1)
+            parsed[name] = uri
+        existing = json.loads(os.environ.get("AMPLIFIERD_BUNDLES", "{}"))
+        existing.update(parsed)
+        os.environ["AMPLIFIERD_BUNDLES"] = json.dumps(existing)
+
+    if default_bundle is not None:
+        os.environ["AMPLIFIERD_DEFAULT_BUNDLE"] = default_bundle
 
     settings = DaemonSettings()
 

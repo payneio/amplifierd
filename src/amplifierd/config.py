@@ -14,6 +14,17 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SETTINGS_DIR = Path.home() / ".amplifierd"
 
+WELL_KNOWN_BUNDLES: dict[str, str] = {
+    "foundation": "git+https://github.com/microsoft/amplifier-foundation@main",
+    "distro": "git+https://github.com/microsoft/amplifier-bundle-distro@main",
+    "modes": "git+https://github.com/microsoft/amplifier-bundle-modes@main",
+    "notify": "git+https://github.com/microsoft/amplifier-bundle-notify@main",
+    "recipes": "git+https://github.com/microsoft/amplifier-bundle-recipes@main",
+    "design-intelligence": "git+https://github.com/microsoft/amplifier-bundle-design-intelligence@main",
+    "exp-delegation": "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=experiments/delegation-only",
+    "amplifier-dev": "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=bundles/amplifier-dev.yaml",
+}
+
 
 class JsonFileSettingsSource(PydanticBaseSettingsSource):
     """Reads settings from a JSON file in the settings directory."""
@@ -49,6 +60,8 @@ class DaemonSettings(BaseSettings):
     sessions_dir: Path | None = None
     log_level: str = "info"
     disabled_plugins: list[str] = Field(default_factory=list)
+    bundles: dict[str, str] = Field(default_factory=lambda: dict(WELL_KNOWN_BUNDLES))
+    default_bundle: str | None = "distro"
 
     # Class-level storage for settings_dir (used by settings_customise_sources).
     # Not thread-safe: concurrent construction would race on this value.

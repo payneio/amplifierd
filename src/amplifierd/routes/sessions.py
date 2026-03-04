@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from amplifierd.config import DaemonSettings
 from amplifierd.models.errors import ErrorTypeURI, ProblemDetail
 from amplifierd.models.sessions import (
     CancelRequest,
@@ -105,17 +106,21 @@ async def create_session(request: Request, body: CreateSessionRequest) -> dict:
             detail=detail.model_dump(exclude_none=True),
         )
     if not body.bundle_name and not body.bundle_uri:
-        detail = ProblemDetail(
-            type=ErrorTypeURI.INVALID_REQUEST,
-            title="Invalid Request",
-            status=400,
-            detail="bundle_name or bundle_uri is required",
-            instance=str(request.url.path),
-        )
-        raise HTTPException(
-            status_code=400,
-            detail=detail.model_dump(exclude_none=True),
-        )
+        settings: DaemonSettings = request.app.state.settings
+        if settings.default_bundle:
+            body.bundle_name = settings.default_bundle
+        else:
+            detail = ProblemDetail(
+                type=ErrorTypeURI.INVALID_REQUEST,
+                title="Invalid Request",
+                status=400,
+                detail="bundle_name or bundle_uri is required (no default_bundle configured)",
+                instance=str(request.url.path),
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=detail.model_dump(exclude_none=True),
+            )
     try:
         handle = await manager.create(
             bundle_name=body.bundle_name,

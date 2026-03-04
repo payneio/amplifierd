@@ -37,8 +37,30 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         from amplifier_foundation import BundleRegistry
 
         app.state.bundle_registry = BundleRegistry()
+
+        # Register configured bundles (name → URI mappings, no downloads)
+        if settings.bundles:
+            app.state.bundle_registry.register(settings.bundles)
+            logger.info(
+                "Registered %d bundle(s): %s",
+                len(settings.bundles),
+                list(settings.bundles.keys()),
+            )
+
+        # Pre-load the default bundle so first session creation is fast
+        if settings.default_bundle:
+            try:
+                await app.state.bundle_registry.load(settings.default_bundle)
+                logger.info("Pre-loaded default bundle: %s", settings.default_bundle)
+            except Exception:
+                logger.warning(
+                    "Failed to pre-load default bundle '%s'",
+                    settings.default_bundle,
+                    exc_info=True,
+                )
+
     except Exception:
-        logger.warning("Failed to create BundleRegistry; starting without it")
+        logger.warning("Failed to create BundleRegistry; starting without it", exc_info=True)
         app.state.bundle_registry = None
 
     sessions_dir = settings.sessions_dir
