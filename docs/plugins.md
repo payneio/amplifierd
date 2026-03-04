@@ -52,15 +52,22 @@ def create_router(state) -> APIRouter:
     return router
 ```
 
-Install it into the amplifierd environment and restart:
+Install it into the amplifierd tool environment and restart:
+
+```bash
+uv tool install --with ./my-amplifierd-plugin git+https://github.com/microsoft/amplifierd
+amplifierd serve
+```
+
+Your endpoint is now live at `GET /my-plugin/hello`.
+
+If you're running amplifierd from a local checkout during development, use `uv pip install` instead:
 
 ```bash
 cd amplifierd
 uv pip install -e ../my-amplifierd-plugin
 uv run amplifierd serve
 ```
-
-Your endpoint is now live at `GET /my-plugin/hello`.
 
 ## Accessing daemon state
 
@@ -147,3 +154,45 @@ AMPLIFIERD_DISABLED_PLUGINS='["my-plugin"]' amplifierd serve
 ## Plugin resilience
 
 Plugin failures never crash the daemon. If `create_router` raises an exception or returns something that isn't an `APIRouter`, the error is logged and that plugin is skipped. All other plugins and core endpoints continue to work.
+
+## Managing environments with uv
+
+When developing multiple plugins, keep each plugin in its own project with its own `pyproject.toml`. uv makes it straightforward to compose them without dependency conflicts.
+
+**Installing multiple plugins into the tool environment:**
+
+```bash
+uv tool install \
+  --with ./my-metrics-plugin \
+  --with ./my-auth-plugin \
+  git+https://github.com/microsoft/amplifierd
+```
+
+Each `--with` adds a plugin package to the amplifierd tool environment. All plugins share the same Python environment, so their dependencies must be compatible.
+
+**Isolating plugin development with workspaces:**
+
+If you're developing several plugins that might have conflicting dependencies, give each its own virtualenv and test against amplifierd independently:
+
+```bash
+# Plugin A — develop and test in isolation
+cd my-metrics-plugin
+uv sync
+uv run pytest
+
+# Plugin B — separate environment
+cd ../my-auth-plugin
+uv sync
+uv run pytest
+```
+
+Then combine them only when installing into the amplifierd tool environment:
+
+```bash
+uv tool install \
+  --with ./my-metrics-plugin \
+  --with ./my-auth-plugin \
+  git+https://github.com/microsoft/amplifierd
+```
+
+If two plugins pull incompatible versions of a shared dependency, uv will report the conflict at install time rather than at runtime.
