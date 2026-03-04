@@ -68,5 +68,5 @@ class TestSessionManager:
 
         sessions = manager.list_sessions()
         assert len(sessions) == 3
-        ids = {h.session_id for h in sessions}
+        ids = {s["session_id"] for s in sessions}
         assert ids == {"session-0", "session-1", "session-2"}

@@ -13,6 +13,7 @@ from typing import Any
 from amplifierd.config import DaemonSettings
 from amplifierd.state.event_bus import EventBus
 from amplifierd.state.session_handle import SessionHandle
+from amplifierd.state.session_index import SessionIndex, SessionIndexEntry
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,23 @@ class SessionManager:
         event_bus: EventBus,
         settings: DaemonSettings,
         bundle_registry: Any = None,
+        sessions_dir: Path | None = None,
     ) -> None:
         self._sessions: dict[str, SessionHandle] = {}
         self._event_bus = event_bus
         self._settings = settings
         self._bundle_registry = bundle_registry
+        self._sessions_dir = sessions_dir
+        self._index: SessionIndex | None = None
+        if sessions_dir:
+            index_path = sessions_dir / "index.json"
+            if index_path.exists():
+                try:
+                    self._index = SessionIndex.load(index_path)
+                except Exception:
+                    self._index = SessionIndex.rebuild(sessions_dir)
+            else:
+                self._index = SessionIndex.rebuild(sessions_dir)
 
     @property
     def event_bus(self) -> EventBus:
@@ -42,6 +55,10 @@ class SessionManager:
     @property
     def settings(self) -> DaemonSettings:
         return self._settings
+
+    @property
+    def sessions_dir(self) -> Path | None:
+        return self._sessions_dir
 
     def resolve_working_dir(self, request_working_dir: str | None) -> str:
         """Resolve working directory using the fallback chain:
@@ -75,6 +92,18 @@ class SessionManager:
             working_dir=working_dir,
         )
         self._sessions[session_id] = handle
+        if self._index is not None:
+            self._index.add(
+                SessionIndexEntry(
+                    session_id=session_id,
+                    status=str(handle.status),
+                    bundle=bundle_name,
+                    created_at=handle.created_at.isoformat(),
+                    last_activity=handle.last_activity.isoformat(),
+                    parent_session_id=getattr(session, "parent_id", None),
+                )
+            )
+            self._index.save()
         logger.info("Registered session %s (bundle=%s)", session_id, bundle_name)
         return handle
 
@@ -82,9 +111,49 @@ class SessionManager:
         """Get a session by ID, or None if not found."""
         return self._sessions.get(session_id)
 
-    def list_sessions(self) -> list[SessionHandle]:
-        """List all live sessions."""
-        return list(self._sessions.values())
+    def list_sessions(self) -> list[dict]:
+        """List all sessions: active in-memory sessions first, then historical from index.
+
+        Returns a list of dicts with a consistent shape:
+            session_id, status, bundle, created_at, last_activity,
+            parent_session_id, stale, is_active, working_dir
+        """
+        active_ids = set(self._sessions)
+        result: list[dict] = []
+
+        for handle in self._sessions.values():
+            result.append(
+                {
+                    "session_id": handle.session_id,
+                    "status": str(handle.status),
+                    "bundle": handle.bundle_name,
+                    "created_at": handle.created_at.isoformat(),
+                    "last_activity": handle.last_activity.isoformat(),
+                    "parent_session_id": handle.parent_id,
+                    "stale": handle.stale,
+                    "is_active": True,
+                    "working_dir": handle.working_dir,
+                }
+            )
+
+        if self._index is not None:
+            for entry in self._index.list_entries():
+                if entry.session_id not in active_ids:
+                    result.append(
+                        {
+                            "session_id": entry.session_id,
+                            "status": entry.status,
+                            "bundle": entry.bundle,
+                            "created_at": entry.created_at,
+                            "last_activity": entry.last_activity,
+                            "parent_session_id": entry.parent_session_id,
+                            "stale": None,
+                            "is_active": False,
+                            "working_dir": None,
+                        }
+                    )
+
+        return result
 
     async def create(
         self,
@@ -132,6 +201,9 @@ class SessionManager:
             logger.warning("Attempted to destroy unknown session %s", session_id)
             return
         await handle.cleanup()
+        if self._index is not None:
+            self._index.update(session_id, status="completed")
+            self._index.save()
         logger.info("Destroyed session %s", session_id)
 
     async def shutdown(self) -> None:

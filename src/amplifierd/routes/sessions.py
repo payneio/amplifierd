@@ -68,6 +68,19 @@ def _summarize(handle: SessionHandle) -> SessionSummary:
     )
 
 
+def _summarize_from_dict(session: dict) -> SessionSummary:
+    """Build a SessionSummary from a session dict (from list_sessions())."""
+    return SessionSummary(
+        session_id=session["session_id"],
+        status=session["status"],
+        bundle=session.get("bundle"),
+        created_at=session.get("created_at"),
+        last_activity=session.get("last_activity"),
+        parent_session_id=session.get("parent_session_id"),
+        stale=session.get("stale"),
+    )
+
+
 # ------------------------------------------------------------------
 # CRUD endpoints
 # ------------------------------------------------------------------
@@ -145,10 +158,10 @@ async def create_session(request: Request, body: CreateSessionRequest) -> dict:
 
 @sessions_router.get("", response_model=SessionListResponse)
 async def list_sessions(request: Request) -> SessionListResponse:
-    """List all sessions."""
+    """List all sessions (active + historical)."""
     manager = request.app.state.session_manager
-    handles = manager.list_sessions()
-    summaries = [_summarize(h) for h in handles]
+    sessions = manager.list_sessions()
+    summaries = [_summarize_from_dict(s) for s in sessions]
     return SessionListResponse(sessions=summaries, total=len(summaries))
 
 
@@ -409,8 +422,12 @@ async def list_forks(request: Request, session_id: str) -> dict[str, Any]:
     _get_handle_or_404(request, session_id)
     manager = request.app.state.session_manager
 
-    all_handles = manager.list_sessions()
-    fork_summaries = [_summarize(h).model_dump() for h in all_handles if h.parent_id == session_id]
+    all_sessions = manager.list_sessions()
+    fork_summaries = [
+        _summarize_from_dict(s).model_dump()
+        for s in all_sessions
+        if s.get("parent_session_id") == session_id
+    ]
     return {"sessions": fork_summaries, "total": len(fork_summaries)}
 
 

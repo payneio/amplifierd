@@ -46,6 +46,7 @@ class DaemonSettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8410
     default_working_dir: Path | None = None
+    sessions_dir: Path | None = None
     log_level: str = "info"
     disabled_plugins: list[str] = Field(default_factory=list)
 
