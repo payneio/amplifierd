@@ -1,8 +1,8 @@
-"""Tests for approval routes with asyncio.Future-based gates and WebSocket channel."""
+"""Tests for approval routes with asyncio.Future-based gates."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Generator
+from collections.abc import Generator
 from types import SimpleNamespace
 from typing import Any
 
@@ -163,72 +163,6 @@ class TestRespondToApprovalEndpoint:
             json={"approved": True},
         )
         assert resp.status_code == 404
-
-
-# -- WS /sessions/{id}/approvals/ws --
-
-
-@pytest.mark.unit
-class TestApprovalWebSocket:
-    """Tests for WS /sessions/{id}/approvals/ws."""
-
-    def test_websocket_accepts_approval_response(self, client: TestClient, app: FastAPI) -> None:
-        """WebSocket accepts approval_response messages and resolves the approval."""
-        _register_session(app, "s1")
-        approval = _add_pending_approval(app, "s1", "r1")
-
-        with client.websocket_connect("/sessions/s1/approvals/ws") as ws:
-            ws.send_json(
-                {
-                    "type": "approval_response",
-                    "request_id": "r1",
-                    "approved": True,
-                    "message": "go ahead",
-                }
-            )
-            ack = ws.receive_json()
-            assert ack["type"] == "approval_ack"
-            assert ack["request_id"] == "r1"
-            assert ack["status"] == "resolved"
-
-        assert approval.resolved is True
-
-    def test_websocket_pushes_approval_required_events(
-        self, client: TestClient, app: FastAPI
-    ) -> None:
-        """WebSocket pushes approval:required events from EventBus."""
-        _register_session(app, "s1")
-        event_bus: EventBus = app.state.event_bus
-
-        from amplifierd.state.transport_event import TransportEvent
-
-        test_event = TransportEvent(
-            event_name="approval:required",
-            data={"request_id": "r1", "tool": "rm"},
-            session_id="s1",
-            timestamp="2024-01-01T00:00:00+00:00",
-            sequence=1,
-        )
-
-        # Replace subscribe with a bounded version that yields one event then stops.
-        # This avoids cross-thread event-loop wakeup issues in tests.
-        original_subscribe = event_bus.subscribe
-
-        async def bounded_subscribe(
-            session_id: str | None = None,
-            filter_patterns: list[str] | None = None,
-        ) -> AsyncIterator[TransportEvent]:
-            yield test_event
-
-        event_bus.subscribe = bounded_subscribe  # type: ignore[assignment]
-
-        try:
-            with client.websocket_connect("/sessions/s1/approvals/ws") as ws:
-                data = ws.receive_json()
-                assert data["event"] == "approval:required"
-                assert data["data"]["request_id"] == "r1"
-        finally:
-            event_bus.subscribe = original_subscribe  # type: ignore[assignment]
 
 
 # -- Router registration --

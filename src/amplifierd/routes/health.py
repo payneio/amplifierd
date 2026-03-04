@@ -14,7 +14,6 @@ health_router = APIRouter()
 
 CAPABILITIES: list[str] = [
     "streaming",
-    "websocket",
     "approval",
     "cancellation",
     "hot_mount",

@@ -1,4 +1,4 @@
-"""Approval routes with asyncio.Future-based gates and WebSocket channel."""
+"""Approval routes with asyncio.Future-based gates."""
 
 from __future__ import annotations
 
@@ -6,11 +6,10 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from amplifierd.models.errors import ErrorTypeURI, ProblemDetail
-from amplifierd.state.event_bus import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -147,61 +146,3 @@ async def respond_to_approval(
         raise HTTPException(status_code=404, detail=detail.model_dump(exclude_none=True))
     approval.resolve({"approved": body.approved, "message": body.message})
     return {"request_id": request_id, "status": "resolved"}
-
-
-@approvals_router.websocket("/sessions/{session_id}/approvals/ws")
-async def approval_ws(websocket: WebSocket, session_id: str) -> None:
-    """Bidirectional WebSocket channel for approval events.
-
-    Pushes ``approval:required`` events from the EventBus and accepts
-    ``approval_response`` messages from the client.
-    """
-    manager = websocket.app.state.session_manager
-    if manager.get(session_id) is None:
-        await websocket.close(code=4004, reason="Session not found")
-        return
-
-    await websocket.accept()
-    event_bus: EventBus = websocket.app.state.event_bus
-
-    async def _push_approval_events() -> None:
-        async for event in event_bus.subscribe(session_id=session_id):
-            if event.event_name == "approval:required":
-                await websocket.send_json(event.to_sse_dict())
-
-    async def _receive_responses() -> None:
-        try:
-            while True:
-                data = await websocket.receive_json()
-                if data.get("type") == "approval_response":
-                    request_id = data.get("request_id")
-                    if request_id:
-                        pending = _get_pending(websocket.app)
-                        session_approvals = pending.get(session_id, {})
-                        approval = session_approvals.get(request_id)
-                        if approval and not approval.resolved:
-                            approval.resolve(
-                                {
-                                    "approved": data.get("approved", False),
-                                    "message": data.get("message"),
-                                }
-                            )
-                            await websocket.send_json(
-                                {
-                                    "type": "approval_ack",
-                                    "request_id": request_id,
-                                    "status": "resolved",
-                                }
-                            )
-        except WebSocketDisconnect:
-            pass
-
-    push_task = asyncio.create_task(_push_approval_events())
-    try:
-        await _receive_responses()
-    finally:
-        push_task.cancel()
-        try:
-            await push_task
-        except asyncio.CancelledError:
-            pass

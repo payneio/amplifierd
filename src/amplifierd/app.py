@@ -71,7 +71,7 @@ def create_app(settings: DaemonSettings | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
         title="amplifierd",
-        description="HTTP/SSE/WebSocket daemon for amplifier-core and amplifier-foundation",
+        description="HTTP/SSE daemon for amplifier-core and amplifier-foundation",
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",

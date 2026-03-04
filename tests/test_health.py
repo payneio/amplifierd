@@ -71,7 +71,6 @@ class TestInfoEndpoint:
         assert isinstance(caps, list)
         for expected in (
             "streaming",
-            "websocket",
             "approval",
             "cancellation",
             "hot_mount",
