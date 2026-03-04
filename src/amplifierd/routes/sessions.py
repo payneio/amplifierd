@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from typing import Any
@@ -434,6 +435,40 @@ async def list_forks(request: Request, session_id: str) -> dict[str, Any]:
 # ------------------------------------------------------------------
 # Tree endpoint
 # ------------------------------------------------------------------
+
+
+@sessions_router.get("/{session_id}/transcript")
+async def get_transcript(request: Request, session_id: str) -> dict:
+    """Load conversation transcript for a session from transcript.jsonl."""
+    manager: SessionManager = request.app.state.session_manager
+    sessions_dir = manager.sessions_dir
+    if not sessions_dir:
+        detail = ProblemDetail(
+            type=ErrorTypeURI.SESSION_NOT_FOUND,
+            title="Session Not Found",
+            status=404,
+            detail="Session persistence not configured",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(status_code=404, detail=detail.model_dump(exclude_none=True))
+    transcript_path = sessions_dir / session_id / "transcript.jsonl"
+    if not transcript_path.exists():
+        detail = ProblemDetail(
+            type=ErrorTypeURI.SESSION_NOT_FOUND,
+            title="Session Not Found",
+            status=404,
+            detail=f"No transcript for session '{session_id}'",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(status_code=404, detail=detail.model_dump(exclude_none=True))
+    messages = []
+    for line in transcript_path.read_text().strip().split("\n"):
+        if line.strip():
+            try:
+                messages.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return {"session_id": session_id, "messages": messages}
 
 
 @sessions_router.get("/{session_id}/tree", response_model=SessionTreeNode)
