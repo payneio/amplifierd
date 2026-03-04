@@ -57,7 +57,9 @@ class DaemonSettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8410
     default_working_dir: Path | None = None
-    sessions_dir: Path | None = None
+    sessions_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".amplifier" / "sessions"
+    )
     log_level: str = "info"
     disabled_plugins: list[str] = Field(default_factory=list)
     bundles: dict[str, str] = Field(default_factory=lambda: dict(WELL_KNOWN_BUNDLES))

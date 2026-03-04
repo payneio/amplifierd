@@ -6,7 +6,9 @@ SessionHandle instances. All route handlers access sessions through it.
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -193,6 +195,27 @@ class SessionManager:
         inject_providers(prepared, providers)
 
         session = await prepared.create_session()
+
+        # Register transcript/metadata persistence hooks
+        if self._sessions_dir:
+            from amplifierd.persistence import register_persistence_hooks
+
+            session_dir = self._sessions_dir / session.session_id
+            session_dir.mkdir(parents=True, exist_ok=True)
+            info_path = session_dir / "session-info.json"
+            if not info_path.exists():
+                info_path.write_text(json.dumps({"working_dir": str(wd)}))
+            register_persistence_hooks(
+                session,
+                session_dir,
+                initial_metadata={
+                    "session_id": session.session_id,
+                    "created": datetime.now(tz=UTC).isoformat(),
+                    "bundle": bundle_name or bundle_uri or "unknown",
+                    "working_dir": str(wd),
+                },
+            )
+
         handle = self.register(
             session=session,
             prepared_bundle=prepared,

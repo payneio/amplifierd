@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,16 +17,16 @@ from amplifierd.state.session_manager import SessionManager
 
 
 @pytest.fixture()
-def client() -> Generator[TestClient]:
-    """Create a test client with session_manager available on app.state."""
+def client(tmp_path: Path) -> Generator[TestClient]:
+    """Create a test client with an isolated session_manager."""
     app = create_app()
-    # Manually set up session_manager so routes can access it
-    # (lifespan may not run outside context-manager usage of TestClient)
-    settings = DaemonSettings()
-    event_bus = EventBus()
-    app.state.session_manager = SessionManager(event_bus=event_bus, settings=settings)
-    app.state.background_tasks = set()
     with TestClient(app) as c:
+        # Override AFTER lifespan so the real sessions_dir is not scanned
+        event_bus = EventBus()
+        settings = DaemonSettings(sessions_dir=tmp_path / "sessions")
+        c.app.state.session_manager = SessionManager(  # type: ignore[union-attr]
+            event_bus=event_bus, settings=settings, sessions_dir=tmp_path / "sessions"
+        )
         yield c
 
 
