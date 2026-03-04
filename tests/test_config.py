@@ -83,3 +83,50 @@ class TestDaemonSettings:
         settings = DaemonSettings(_settings_dir=tmp_path / "nonexistent")
         assert settings.host == "127.0.0.1"
         assert settings.port == 8410
+
+    def test_bundles_defaults_to_well_known(self, tmp_path: Path):
+        """Bundles default to the WELL_KNOWN_BUNDLES dict."""
+        from amplifierd.config import WELL_KNOWN_BUNDLES, DaemonSettings
+
+        settings = DaemonSettings(_settings_dir=tmp_path)
+        assert settings.bundles == WELL_KNOWN_BUNDLES
+        assert "foundation" in settings.bundles
+        assert "distro" in settings.bundles
+        assert "modes" in settings.bundles
+
+    def test_default_bundle_defaults_to_distro(self, tmp_path: Path):
+        """Default bundle defaults to 'distro'."""
+        from amplifierd.config import DaemonSettings
+
+        settings = DaemonSettings(_settings_dir=tmp_path)
+        assert settings.default_bundle == "distro"
+
+    def test_bundles_override_from_json(self, tmp_path: Path):
+        """Bundles in settings.json replace the default well-known bundles."""
+        from amplifierd.config import DaemonSettings
+
+        settings_file = tmp_path / "settings.json"
+        settings_file.write_text(
+            json.dumps({"bundles": {"custom": "file:///tmp/mybundle"}})
+        )
+        settings = DaemonSettings(_settings_dir=tmp_path)
+        assert settings.bundles == {"custom": "file:///tmp/mybundle"}
+
+    def test_bundles_from_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """AMPLIFIERD_BUNDLES env var overrides default bundles."""
+        from amplifierd.config import DaemonSettings
+
+        monkeypatch.setenv(
+            "AMPLIFIERD_BUNDLES",
+            json.dumps({"my-bundle": "git+https://example.com/bundle"}),
+        )
+        settings = DaemonSettings(_settings_dir=tmp_path)
+        assert settings.bundles == {"my-bundle": "git+https://example.com/bundle"}
+
+    def test_default_bundle_from_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """AMPLIFIERD_DEFAULT_BUNDLE env var overrides default."""
+        from amplifierd.config import DaemonSettings
+
+        monkeypatch.setenv("AMPLIFIERD_DEFAULT_BUNDLE", "foundation")
+        settings = DaemonSettings(_settings_dir=tmp_path)
+        assert settings.default_bundle == "foundation"

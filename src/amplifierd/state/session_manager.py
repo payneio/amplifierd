@@ -185,7 +185,7 @@ class SessionManager:
         name_or_uri = bundle_uri or bundle_name
         bundle = await self._bundle_registry.load(name_or_uri)
         prepared = await bundle.prepare()
-        session = prepared.create_session()
+        session = await prepared.create_session()
         handle = self.register(
             session=session,
             prepared_bundle=prepared,

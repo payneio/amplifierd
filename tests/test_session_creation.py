@@ -31,7 +31,7 @@ def _make_mock_registry(session_id: str = "fake-session-1") -> MagicMock:
     """Create a mock BundleRegistry that returns fake sessions."""
     fake_session = _make_fake_session(session_id)
     mock_prepared = MagicMock()
-    mock_prepared.create_session.return_value = fake_session
+    mock_prepared.create_session = AsyncMock(return_value=fake_session)
     mock_bundle = MagicMock()
     mock_bundle.prepare = AsyncMock(return_value=mock_prepared)
     mock_registry = MagicMock()
@@ -103,7 +103,16 @@ class TestCreateSessionEndpoint:
         resp = client.post("/sessions", json={"bundle_name": "test-bundle"})
         assert resp.status_code == 503
 
-    def test_create_session_no_bundle_name_or_uri_returns_400(self, client: TestClient) -> None:
-        """POST /sessions with no bundle_name or bundle_uri returns 400."""
+    def test_create_session_no_bundle_uses_default(self, client: TestClient) -> None:
+        """POST /sessions with no bundle uses the configured default_bundle."""
+        resp = client.post("/sessions", json={})
+        assert resp.status_code == 201
+        data = resp.json()
+        assert "session_id" in data
+        assert data["bundle_name"] == "distro"
+
+    def test_create_session_no_bundle_no_default_returns_400(self, client: TestClient) -> None:
+        """POST /sessions returns 400 when no bundle specified and no default configured."""
+        client.app.state.settings.default_bundle = None  # type: ignore[union-attr]
         resp = client.post("/sessions", json={})
         assert resp.status_code == 400
