@@ -185,6 +185,13 @@ class SessionManager:
         name_or_uri = bundle_uri or bundle_name
         bundle = await self._bundle_registry.load(name_or_uri)
         prepared = await bundle.prepare()
+
+        # Inject providers from ~/.amplifier/settings.yaml
+        from amplifierd.providers import inject_providers, load_provider_config
+
+        providers = load_provider_config()
+        inject_providers(prepared, providers)
+
         session = await prepared.create_session()
         handle = self.register(
             session=session,
