@@ -186,14 +186,15 @@ class SessionManager:
         wd = self.resolve_working_dir(working_dir)
         name_or_uri = bundle_uri or bundle_name
         bundle = await self._bundle_registry.load(name_or_uri)
-        prepared = await bundle.prepare()
 
-        # Inject providers from ~/.amplifier/settings.yaml
+        # Inject providers from ~/.amplifier/settings.yaml BEFORE prepare()
+        # so the activation step downloads and installs their dependencies.
         from amplifierd.providers import inject_providers, load_provider_config
 
         providers = load_provider_config()
-        inject_providers(prepared, providers)
+        inject_providers(bundle, providers)
 
+        prepared = await bundle.prepare()
         session = await prepared.create_session()
 
         # Register transcript/metadata persistence hooks
