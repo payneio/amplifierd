@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "amplifierd"
@@ -23,9 +23,11 @@ dependencies = [
 [project.scripts]
 amplifierd = "amplifierd.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["amplifierd*"]
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/amplifierd"]
 
 [project.optional-dependencies]
 dev = [

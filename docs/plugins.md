@@ -32,8 +32,12 @@ dependencies = ["fastapi"]
 [project.entry-points."amplifierd.plugins"]
 my-plugin = "my_plugin"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_plugin"]
 ```
 
 **`src/my_plugin/__init__.py`**:
