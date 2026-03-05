@@ -183,25 +183,60 @@ async def get_session(request: Request, session_id: str) -> SessionDetail:
     )
 
 
-@sessions_router.patch("/{session_id}", response_model=SessionDetail)
+@sessions_router.patch("/{session_id}")
 async def patch_session(
     request: Request, session_id: str, body: PatchSessionRequest
-) -> SessionDetail:
-    """Patch session properties (e.g. working_dir)."""
-    handle = _get_handle_or_404(request, session_id)
-    if body.working_dir is not None:
-        try:
-            from amplifier_foundation import set_working_dir
+) -> dict:
+    """Patch session properties (working_dir, name).
 
-            set_working_dir(handle.session, body.working_dir)
-        except (ImportError, AttributeError):
-            logger.warning("amplifier_foundation.set_working_dir not available or failed")
-        handle._working_dir = body.working_dir  # noqa: SLF001
-    summary = _summarize(handle)
-    return SessionDetail(
-        **summary.model_dump(),
-        working_dir=handle.working_dir,
+    Works for both live (in-memory) and disk-only (history) sessions.
+    """
+    manager: SessionManager = request.app.state.session_manager
+    handle = manager.get(session_id)
+
+    if handle is not None:
+        if body.working_dir is not None:
+            try:
+                from amplifier_foundation import set_working_dir
+
+                set_working_dir(handle.session, body.working_dir)
+            except (ImportError, AttributeError):
+                logger.warning("amplifier_foundation.set_working_dir not available or failed")
+            handle._working_dir = body.working_dir  # noqa: SLF001
+
+    # Persist name and/or working_dir to metadata.json on disk
+    metadata_updates: dict[str, str] = {}
+    if body.name is not None:
+        metadata_updates["name"] = body.name
+    if body.working_dir is not None:
+        metadata_updates["working_dir"] = body.working_dir
+
+    if metadata_updates and manager.sessions_dir:
+        session_dir = manager.sessions_dir / session_id
+        if session_dir.exists():
+            from amplifierd.persistence import write_metadata
+
+            write_metadata(session_dir, metadata_updates)
+
+    if handle is not None:
+        summary = _summarize(handle)
+        return SessionDetail(
+            **summary.model_dump(),
+            working_dir=handle.working_dir,
+        ).model_dump(exclude_none=True)
+
+    # Disk-only session — return minimal response
+    if manager.sessions_dir and (manager.sessions_dir / session_id).exists():
+        return {"session_id": session_id, "updated": True}
+
+    detail = ProblemDetail(
+        type=ErrorTypeURI.SESSION_NOT_FOUND,
+        title="Session Not Found",
+        status=404,
+        detail=f"Session '{session_id}' not found",
+        instance=str(request.url.path),
     )
+    raise HTTPException(status_code=404, detail=detail.model_dump(exclude_none=True))
 
 
 @sessions_router.delete("/{session_id}", status_code=204)
@@ -474,7 +509,26 @@ async def get_transcript(request: Request, session_id: str) -> dict:
                 messages.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    return {"session_id": session_id, "messages": messages}
+
+    # Build revision signature for stale-change detection
+    try:
+        stat = transcript_path.stat()
+        mtime_ns = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000))
+        revision = f"{int(mtime_ns)}:{int(stat.st_size)}"
+        from datetime import UTC, datetime
+
+        last_updated = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
+    except OSError:
+        revision = None
+        last_updated = None
+
+    return {
+        "session_id": session_id,
+        "transcript": messages,
+        "messages": messages,  # backward compat
+        "revision": revision,
+        "last_updated": last_updated,
+    }
 
 
 @sessions_router.get("/{session_id}/tree", response_model=SessionTreeNode)

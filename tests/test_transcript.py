@@ -58,6 +58,10 @@ def test_get_transcript_returns_messages(client: TestClient, sessions_dir: Path)
     assert data["messages"][0]["content"] == "hello"
     assert data["messages"][1]["role"] == "assistant"
     assert data["session_id"] == sid
+    # Frontend reads data.transcript; verify it matches data.messages
+    assert data["transcript"] == data["messages"]
+    assert isinstance(data["revision"], str)
+    assert isinstance(data["last_updated"], str)
 
 
 def test_get_transcript_missing_session(client: TestClient) -> None:

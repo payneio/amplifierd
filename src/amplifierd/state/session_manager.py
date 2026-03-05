@@ -66,9 +66,14 @@ class SessionManager:
     def resolve_working_dir(self, request_working_dir: str | None) -> str:
         """Resolve working directory using the fallback chain:
         request > daemon config > user home.
+
+        Tilde (``~``) prefixes are expanded to the user's home directory
+        so the stored path is always absolute.
         """
+        import os
+
         if request_working_dir:
-            return request_working_dir
+            return os.path.expanduser(request_working_dir)
         if self._settings.default_working_dir:
             return str(self._settings.default_working_dir)
         return str(Path.home())
