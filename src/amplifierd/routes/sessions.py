@@ -186,7 +186,7 @@ async def get_session(request: Request, session_id: str) -> SessionDetail:
 async def patch_session(
     request: Request, session_id: str, body: PatchSessionRequest
 ) -> SessionDetail:
-    """Patch session properties (e.g. working_dir)."""
+    """Patch session properties (e.g. working_dir, name)."""
     handle = _get_handle_or_404(request, session_id)
     if body.working_dir is not None:
         try:
@@ -196,6 +196,26 @@ async def patch_session(
         except (ImportError, AttributeError):
             logger.warning("amplifier_foundation.set_working_dir not available or failed")
         handle._working_dir = body.working_dir  # noqa: SLF001
+    if body.name is not None:
+        manager: SessionManager = request.app.state.session_manager
+        sessions_dir = manager.sessions_dir
+        if sessions_dir is not None:
+            from amplifierd.persistence import write_metadata
+
+            session_dir = sessions_dir / session_id
+            try:
+                await asyncio.to_thread(write_metadata, session_dir, {"name": body.name})
+            except Exception:
+                logger.warning(
+                    "Failed to persist session name for %s", session_id, exc_info=True
+                )
+        # Emit event so SSE clients (e.g. sidebar) can update immediately
+        event_bus = request.app.state.event_bus
+        event_bus.publish(
+            session_id=session_id,
+            event_name="session_renamed",
+            data={"session_id": session_id, "name": body.name},
+        )
     summary = _summarize(handle)
     return SessionDetail(
         **summary.model_dump(),
