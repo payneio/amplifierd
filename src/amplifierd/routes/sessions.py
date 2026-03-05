@@ -26,6 +26,7 @@ from amplifierd.models.sessions import (
     SessionListResponse,
     SessionSummary,
     SessionTreeNode,
+    SetModeRequest,
     StaleResponse,
 )
 from amplifierd.state.session_handle import SessionHandle, SessionStatus
@@ -504,3 +505,183 @@ async def session_tree(request: Request, session_id: str) -> SessionTreeNode:
         )
 
     return _build_tree(handle)
+
+
+# ------------------------------------------------------------------
+# Resume endpoint
+# ------------------------------------------------------------------
+
+
+@sessions_router.post("/{session_id}/resume")
+async def resume_session(request: Request, session_id: str) -> dict:
+    """Resume a session from disk after server restart."""
+    manager: SessionManager = request.app.state.session_manager
+    try:
+        handle = await manager.resume(session_id)
+    except FileNotFoundError as exc:
+        detail = ProblemDetail(
+            type=ErrorTypeURI.SESSION_NOT_FOUND,
+            title="Session Not Found",
+            status=404,
+            detail=str(exc),
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=detail.model_dump(exclude_none=True),
+        ) from exc
+    except (ValueError, RuntimeError) as exc:
+        detail = ProblemDetail(
+            type=ErrorTypeURI.CONFIGURATION_ERROR,
+            title="Resume Failed",
+            status=502,
+            detail=str(exc),
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=detail.model_dump(exclude_none=True),
+        ) from exc
+    except Exception as exc:
+        logger.exception("Failed to resume session %s", session_id)
+        detail = ProblemDetail(
+            type=ErrorTypeURI.BUNDLE_LOAD_ERROR,
+            title="Resume Failed",
+            status=502,
+            detail=f"Failed to resume session: {exc}",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=detail.model_dump(exclude_none=True),
+        ) from exc
+
+    return {
+        "session_id": handle.session_id,
+        "status": str(handle.status),
+        "bundle_name": handle.bundle_name,
+        "working_dir": handle.working_dir,
+        "created_at": handle.created_at.isoformat(),
+        "resumed": True,
+    }
+
+
+# ------------------------------------------------------------------
+# Introspection endpoints (tools, modes, config, metadata)
+# ------------------------------------------------------------------
+
+
+@sessions_router.get("/{session_id}/tools")
+async def list_tools(request: Request, session_id: str) -> dict:
+    """List available tools for a session."""
+    handle = _get_handle_or_404(request, session_id)
+    coordinator = getattr(handle.session, "coordinator", None)
+    if coordinator is None:
+        return {"tools": [], "total": 0}
+    tools = coordinator.get("tools") or {}
+    tool_list = [
+        {
+            "name": name,
+            "description": getattr(tool, "description", "No description"),
+        }
+        for name, tool in tools.items()
+    ]
+    return {"tools": tool_list, "total": len(tool_list)}
+
+
+@sessions_router.get("/{session_id}/modes")
+async def list_modes(request: Request, session_id: str) -> dict:
+    """List available modes and active mode for a session."""
+    handle = _get_handle_or_404(request, session_id)
+    coordinator = getattr(handle.session, "coordinator", None)
+    if coordinator is None:
+        return {"active_mode": None, "modes": []}
+    state = getattr(coordinator, "session_state", {})
+    discovery = state.get("mode_discovery")
+    if not discovery:
+        return {"active_mode": None, "modes": []}
+    modes = discovery.list_modes()
+    return {
+        "active_mode": state.get("active_mode"),
+        "modes": [{"name": n, "description": d, "source": s} for n, d, s in modes],
+    }
+
+
+@sessions_router.post("/{session_id}/modes")
+async def set_mode(request: Request, session_id: str, body: SetModeRequest) -> dict:
+    """Activate a mode by name, or deactivate (None)."""
+    handle = _get_handle_or_404(request, session_id)
+    coordinator = getattr(handle.session, "coordinator", None)
+    if coordinator is None:
+        raise HTTPException(status_code=503, detail="Coordinator unavailable")
+    state = getattr(coordinator, "session_state", None)
+    if state is None:
+        raise HTTPException(
+            status_code=503, detail="Modes not available (hooks-mode not mounted)"
+        )
+
+    discovery = state.get("mode_discovery")
+    mode_hooks = state.get("mode_hooks")
+    previous = state.get("active_mode")
+
+    if body.mode_name is None:
+        state["active_mode"] = None
+        if mode_hooks:
+            mode_hooks.reset_warnings()
+        return {"active_mode": None, "previous_mode": previous}
+
+    if not discovery:
+        raise HTTPException(status_code=503, detail="Mode discovery not available")
+    mode_def = discovery.find(body.mode_name)
+    if not mode_def:
+        available = [n for n, _d, _s in discovery.list_modes()]
+        detail = ProblemDetail(
+            type=ErrorTypeURI.INVALID_REQUEST,
+            title="Mode Not Found",
+            status=404,
+            detail=f"Mode not found: {body.mode_name}",
+            instance=str(request.url.path),
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=detail.model_dump(exclude_none=True),
+        )
+
+    state["active_mode"] = body.mode_name
+    if mode_hooks:
+        mode_hooks.reset_warnings()
+    return {"active_mode": body.mode_name, "previous_mode": previous}
+
+
+@sessions_router.get("/{session_id}/config")
+async def get_session_config(request: Request, session_id: str) -> dict:
+    """Get the mount-plan config dict for a live session."""
+    handle = _get_handle_or_404(request, session_id)
+    config = getattr(handle.session, "config", None)
+    return {"config": config}
+
+
+@sessions_router.patch("/{session_id}/metadata")
+async def update_metadata(request: Request, session_id: str, body: dict) -> dict:
+    """Update metadata for a session (active or inactive on disk)."""
+    manager: SessionManager = request.app.state.session_manager
+
+    if manager.sessions_dir:
+        session_dir = manager.sessions_dir / session_id
+        if session_dir.exists():
+            from amplifierd.persistence import write_metadata
+
+            write_metadata(session_dir, body)
+            return {"updated": True, "session_id": session_id}
+
+    detail = ProblemDetail(
+        type=ErrorTypeURI.SESSION_NOT_FOUND,
+        title="Session Not Found",
+        status=404,
+        detail=f"No session directory found for '{session_id}'",
+        instance=str(request.url.path),
+    )
+    raise HTTPException(
+        status_code=404,
+        detail=detail.model_dump(exclude_none=True),
+    )
