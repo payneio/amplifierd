@@ -6,6 +6,7 @@ SessionHandle instances. All route handlers access sessions through it.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -65,9 +66,14 @@ class SessionManager:
     def resolve_working_dir(self, request_working_dir: str | None) -> str:
         """Resolve working directory using the fallback chain:
         request > daemon config > user home.
+
+        Tilde (``~``) prefixes are expanded to the user's home directory
+        so the stored path is always absolute.
         """
+        import os
+
         if request_working_dir:
-            return request_working_dir
+            return os.path.expanduser(request_working_dir)
         if self._settings.default_working_dir:
             return str(self._settings.default_working_dir)
         return str(Path.home())
@@ -186,14 +192,15 @@ class SessionManager:
         wd = self.resolve_working_dir(working_dir)
         name_or_uri = bundle_uri or bundle_name
         bundle = await self._bundle_registry.load(name_or_uri)
-        prepared = await bundle.prepare()
 
-        # Inject providers from ~/.amplifier/settings.yaml
+        # Inject providers from ~/.amplifier/settings.yaml BEFORE prepare()
+        # so the activation step downloads and installs their dependencies.
         from amplifierd.providers import inject_providers, load_provider_config
 
         providers = load_provider_config()
-        inject_providers(prepared, providers)
+        inject_providers(bundle, providers)
 
+        prepared = await bundle.prepare()
         session = await prepared.create_session()
 
         # Register transcript/metadata persistence hooks
@@ -216,11 +223,139 @@ class SessionManager:
                 },
             )
 
+        # Register spawn capability so delegate tool can spawn sub-sessions
+        try:
+            from amplifierd.spawn import register_spawn_capability
+
+            register_spawn_capability(session, prepared, session.session_id)
+        except (ImportError, Exception):  # noqa: BLE001
+            logger.debug("Spawn capability registration skipped", exc_info=True)
+
         handle = self.register(
             session=session,
             prepared_bundle=prepared,
             bundle_name=bundle_name or bundle_uri or "unknown",
             working_dir=wd,
+        )
+        return handle
+
+    async def resume(self, session_id: str) -> SessionHandle:
+        """Resume a session from disk after server restart.
+
+        Loads the transcript from ``{sessions_dir}/{session_id}/transcript.jsonl``,
+        handles orphaned tool calls, creates a fresh session with
+        ``is_resumed=True``, and injects the transcript into the new
+        session's context.
+
+        Args:
+            session_id: ID of the session to resume.
+
+        Returns:
+            The resumed SessionHandle.
+
+        Raises:
+            ValueError: If sessions_dir is not configured.
+            RuntimeError: If BundleRegistry is not available.
+            FileNotFoundError: If session directory or transcript not found.
+        """
+        # Return existing handle if already active
+        existing = self._sessions.get(session_id)
+        if existing is not None:
+            return existing
+
+        if not self._sessions_dir:
+            raise ValueError("Session persistence not configured (sessions_dir is None)")
+        if not self._bundle_registry:
+            raise RuntimeError("BundleRegistry not available")
+
+        session_dir = self._sessions_dir / session_id
+        if not session_dir.exists():
+            raise FileNotFoundError(f"No session directory for {session_id}")
+
+        # 1. Load transcript from disk (offload sync I/O to thread)
+        from amplifierd.persistence import load_metadata, load_transcript
+
+        transcript = await asyncio.to_thread(load_transcript, session_dir)
+
+        # 2. Handle orphaned tool calls
+        try:
+            from amplifier_foundation.session import (
+                add_synthetic_tool_results,
+                find_orphaned_tool_calls,
+            )
+
+            orphan_ids = find_orphaned_tool_calls(transcript)
+            if orphan_ids:
+                transcript = add_synthetic_tool_results(transcript, orphan_ids)
+                logger.info(
+                    "Added synthetic results for %d orphaned tool calls in %s",
+                    len(orphan_ids),
+                    session_id,
+                )
+        except ImportError:
+            logger.warning(
+                "amplifier_foundation.session helpers not available; "
+                "skipping orphan handling"
+            )
+
+        # 3. Load metadata to determine bundle and working_dir
+        metadata = await asyncio.to_thread(load_metadata, session_dir)
+        bundle_name = metadata.get("bundle", self._settings.default_bundle or "unknown")
+        working_dir = metadata.get("working_dir", str(Path.home()))
+
+        # 4. Load bundle, inject providers, prepare, create session
+        bundle = await self._bundle_registry.load(bundle_name)
+
+        from amplifierd.providers import inject_providers, load_provider_config
+
+        providers = load_provider_config()
+        inject_providers(bundle, providers)
+
+        prepared = await bundle.prepare()
+        session = await prepared.create_session(
+            session_id=session_id,
+            is_resumed=True,
+        )
+
+        # 5. Inject transcript into context (preserving system prompt)
+        context = session.coordinator.get("context")
+        if context and hasattr(context, "set_messages"):
+            current_msgs = await context.get_messages()
+            system_msgs = [m for m in current_msgs if m.get("role") == "system"]
+
+            await context.set_messages(transcript)
+
+            # Re-inject system prompt if transcript lacks one
+            restored = await context.get_messages()
+            if system_msgs and not any(
+                m.get("role") == "system" for m in restored
+            ):
+                await context.set_messages(system_msgs + list(restored))
+
+        # 6. Register persistence hooks
+        from amplifierd.persistence import register_persistence_hooks
+
+        register_persistence_hooks(session, session_dir)
+
+        # 7. Register spawn capability
+        try:
+            from amplifierd.spawn import register_spawn_capability
+
+            register_spawn_capability(session, prepared, session_id)
+        except (ImportError, Exception):  # noqa: BLE001
+            logger.debug("Spawn capability registration skipped", exc_info=True)
+
+        # 8. Register in SessionManager
+        handle = self.register(
+            session=session,
+            prepared_bundle=prepared,
+            bundle_name=bundle_name,
+            working_dir=working_dir,
+        )
+        logger.info(
+            "Session %s resumed (%d messages restored)",
+            session_id,
+            len(transcript),
         )
         return handle
 

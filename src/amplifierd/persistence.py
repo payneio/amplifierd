@@ -100,6 +100,40 @@ def write_metadata(session_dir: Path, metadata: dict[str, Any]) -> None:
     _atomic_write(metadata_path, content)
 
 
+def load_transcript(session_dir: Path) -> list[dict[str, Any]]:
+    """Load messages from transcript.jsonl in a session directory.
+
+    Returns a list of message dicts.  Raises :class:`FileNotFoundError`
+    if the transcript file does not exist.
+    """
+    transcript_path = session_dir / _TRANSCRIPT_FILENAME
+    if not transcript_path.exists():
+        raise FileNotFoundError(f"No transcript at {transcript_path}")
+    messages: list[dict[str, Any]] = []
+    for line in transcript_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            try:
+                messages.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.debug("Skipping unreadable transcript line")
+    return messages
+
+
+def load_metadata(session_dir: Path) -> dict[str, Any]:
+    """Load metadata.json from a session directory.
+
+    Returns an empty dict if the file doesn't exist or is unreadable.
+    """
+    metadata_path = session_dir / _METADATA_FILENAME
+    if not metadata_path.exists():
+        return {}
+    try:
+        return json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 class TranscriptSaveHook:
     """Persists transcript.jsonl incrementally during execution.
 

@@ -36,6 +36,7 @@ class ExecuteRequest(BaseModel):
 
     prompt: str
     metadata: dict[str, Any] | None = None
+    images: list[str] | None = None  # Passthrough — not yet wired to execution
 
 
 class CancelRequest(BaseModel):
@@ -142,3 +143,9 @@ class ForkResponse(BaseModel):
     parent_id: str
     forked_from_turn: int
     message_count: int
+
+
+class SetModeRequest(BaseModel):
+    """Request to set the active mode for a session."""
+
+    mode_name: str | None = None

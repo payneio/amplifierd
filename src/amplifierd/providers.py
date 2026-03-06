@@ -72,35 +72,43 @@ def expand_env_vars(value: Any) -> Any:
     return value
 
 
-def inject_providers(prepared: Any, providers: list[dict[str, Any]]) -> None:
-    """Inject provider config into a PreparedBundle.
+def merge_settings_providers(
+    existing: list[dict[str, Any]], settings_providers: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Merge settings providers into an existing provider list.
 
-    Sets both mount_plan["providers"] (for root sessions) and
-    bundle.providers (for child/spawned sessions).
+    Settings override bundle providers by module ID.
+    Environment variables in settings values are expanded.
 
     Args:
-        prepared: A PreparedBundle instance.
+        existing: Current provider list (from bundle).
+        settings_providers: Provider config list from load_provider_config().
+
+    Returns:
+        Merged provider list with env vars expanded.
+    """
+    if not settings_providers:
+        return list(existing)
+    expanded = expand_env_vars(settings_providers)
+    by_module: dict[str, dict[str, Any]] = {
+        p["module"]: p for p in existing if isinstance(p, dict) and "module" in p
+    }
+    for p in expanded:
+        if isinstance(p, dict) and "module" in p:
+            by_module[p["module"]] = p
+    return list(by_module.values())
+
+
+def inject_providers(bundle: Any, providers: list[dict[str, Any]]) -> None:
+    """Inject provider config into a Bundle before prepare().
+
+    Must be called BEFORE bundle.prepare() so that the activation step
+    downloads and installs provider dependencies (e.g. the anthropic SDK).
+
+    Args:
+        bundle: An AmplifierBundle instance (has .providers list).
         providers: Provider config list from load_provider_config().
     """
     if not providers:
         return
-
-    expanded = expand_env_vars(providers)
-
-    # Merge with any existing bundle providers (settings override by module ID)
-    existing = prepared.mount_plan.get("providers", [])
-    if existing:
-        by_module: dict[str, dict[str, Any]] = {
-            p["module"]: p for p in existing if isinstance(p, dict) and "module" in p
-        }
-        for p in expanded:
-            if isinstance(p, dict) and "module" in p:
-                by_module[p["module"]] = p
-        expanded = list(by_module.values())
-
-    prepared.mount_plan["providers"] = expanded
-
-    # Sync to bundle dataclass for child sessions (spawned via PreparedBundle.spawn())
-    bundle = getattr(prepared, "bundle", None)
-    if bundle is not None and hasattr(bundle, "providers"):
-        bundle.providers = list(expanded)
+    bundle.providers = merge_settings_providers(bundle.providers, providers)

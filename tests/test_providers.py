@@ -123,73 +123,76 @@ class TestExpandEnvVars:
         assert expand_env_vars(None) is None
 
 
-def _make_prepared(
-    mount_plan: dict[str, Any] | None = None,
-    has_bundle: bool = True,
+def _make_bundle(
+    providers: list[dict[str, Any]] | None = None,
 ) -> SimpleNamespace:
-    """Create a fake PreparedBundle for testing."""
-    bundle = SimpleNamespace(providers=[]) if has_bundle else None
-    return SimpleNamespace(
-        mount_plan=mount_plan or {},
-        bundle=bundle,
-    )
+    """Create a fake Bundle for testing."""
+    return SimpleNamespace(providers=list(providers or []))
 
 
 @pytest.mark.unit
 class TestInjectProviders:
     """Tests for inject_providers()."""
 
-    def test_sets_mount_plan(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_sets_providers(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from amplifierd.providers import inject_providers
 
         monkeypatch.setenv("KEY", "val")
-        prepared = _make_prepared()
+        bundle = _make_bundle()
         providers = [{"module": "provider-test", "config": {"api_key": "${KEY}"}}]
-        inject_providers(prepared, providers)
-        assert len(prepared.mount_plan["providers"]) == 1
-        assert prepared.mount_plan["providers"][0]["config"]["api_key"] == "val"
-
-    def test_syncs_to_bundle(self) -> None:
-        from amplifierd.providers import inject_providers
-
-        prepared = _make_prepared()
-        providers = [{"module": "provider-test", "config": {"key": "literal"}}]
-        inject_providers(prepared, providers)
-        assert len(prepared.bundle.providers) == 1
-        assert prepared.bundle.providers[0]["module"] == "provider-test"
+        inject_providers(bundle, providers)
+        assert len(bundle.providers) == 1
+        assert bundle.providers[0]["config"]["api_key"] == "val"
 
     def test_empty_noop(self) -> None:
         from amplifierd.providers import inject_providers
 
-        prepared = _make_prepared()
-        inject_providers(prepared, [])
-        assert "providers" not in prepared.mount_plan
+        bundle = _make_bundle()
+        inject_providers(bundle, [])
+        assert bundle.providers == []
 
     def test_merges_with_existing(self) -> None:
         from amplifierd.providers import inject_providers
 
-        prepared = _make_prepared(
-            mount_plan={
-                "providers": [
-                    {"module": "existing-provider", "config": {"key": "old"}},
-                ]
-            }
+        bundle = _make_bundle(
+            providers=[
+                {"module": "existing-provider", "config": {"key": "old"}},
+            ]
         )
         providers = [
             {"module": "existing-provider", "config": {"key": "new"}},
             {"module": "new-provider", "config": {"key": "added"}},
         ]
-        inject_providers(prepared, providers)
-        result = prepared.mount_plan["providers"]
-        assert len(result) == 2
-        by_module = {p["module"]: p for p in result}
+        inject_providers(bundle, providers)
+        assert len(bundle.providers) == 2
+        by_module = {p["module"]: p for p in bundle.providers}
         assert by_module["existing-provider"]["config"]["key"] == "new"
         assert by_module["new-provider"]["config"]["key"] == "added"
 
-    def test_no_bundle_attribute(self) -> None:
-        from amplifierd.providers import inject_providers
 
-        prepared = _make_prepared(has_bundle=False)
-        providers = [{"module": "test", "config": {}}]
-        inject_providers(prepared, providers)
-        assert len(prepared.mount_plan["providers"]) == 1
+@pytest.mark.unit
+class TestMergeSettingsProviders:
+    """Tests for merge_settings_providers()."""
+
+    def test_empty_settings(self) -> None:
+        from amplifierd.providers import merge_settings_providers
+
+        existing = [{"module": "a", "config": {}}]
+        assert merge_settings_providers(existing, []) == existing
+
+    def test_settings_override(self) -> None:
+        from amplifierd.providers import merge_settings_providers
+
+        existing = [{"module": "a", "config": {"key": "old"}}]
+        settings = [{"module": "a", "config": {"key": "new"}}]
+        result = merge_settings_providers(existing, settings)
+        assert len(result) == 1
+        assert result[0]["config"]["key"] == "new"
+
+    def test_adds_new_provider(self) -> None:
+        from amplifierd.providers import merge_settings_providers
+
+        existing = [{"module": "a", "config": {}}]
+        settings = [{"module": "b", "config": {}}]
+        result = merge_settings_providers(existing, settings)
+        assert len(result) == 2

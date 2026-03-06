@@ -50,6 +50,7 @@ class SessionHandle:
         self._approval_cache: dict[str, Any] = {}
 
         self._wire_events()
+        self._wire_display()
 
     def __repr__(self) -> str:
         sid = self.session_id
@@ -160,6 +161,30 @@ class SessionHandle:
                 logger.debug("Failed to register hook for event %s", event_name, exc_info=True)
 
         logger.debug("Wired %d event hooks for session %s", registered, self.session_id)
+
+    def _wire_display(self) -> None:
+        """Wire an EventBusDisplaySystem onto the coordinator.
+
+        Enables hooks that call ``coordinator.get("display").show_message()``
+        to have their messages published to EventBus as ``display_message``
+        events visible to SSE subscribers.
+        """
+        try:
+            from amplifierd.display import EventBusDisplaySystem
+        except ImportError:
+            logger.debug("Display system not available; skipping display wiring")
+            return
+
+        coordinator = self._session.coordinator
+        if not hasattr(coordinator, "set"):
+            return
+
+        display = EventBusDisplaySystem(
+            event_bus=self._event_bus,
+            session_id=self.session_id,
+        )
+        coordinator.set("display", display)
+        logger.debug("Display system wired for session %s", self.session_id)
 
     # ------------------------------------------------------------------
     # Mutators
