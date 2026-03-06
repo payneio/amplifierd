@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from pathlib import Path
 from types import SimpleNamespace
@@ -267,4 +268,123 @@ class TestSessionStaleEndpoint:
     def test_stale_not_found(self, client: TestClient) -> None:
         """POST stale on nonexistent session returns 404."""
         resp = client.post("/sessions/nonexistent/stale")
+        assert resp.status_code == 404
+
+
+@pytest.mark.unit
+class TestSessionPatchNameEndpoint:
+    """Tests for PATCH /sessions/{session_id} with name field."""
+
+    def test_patch_name_returns_session_detail(self, client: TestClient) -> None:
+        """PATCH with name returns SessionDetail (200)."""
+        _register_handle(client, "sess-rename")
+        resp = client.patch("/sessions/sess-rename", json={"name": "My Session"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["session_id"] == "sess-rename"
+        assert "status" in data
+        assert "bundle" in data
+
+    def test_patch_name_persists_to_metadata_json(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
+        """PATCH with name writes name to metadata.json in session dir."""
+        manager = client.app.state.session_manager
+        sessions_dir = manager.sessions_dir
+        _register_handle(client, "sess-meta")
+        # Pre-create the session dir so write_metadata can find it
+        session_dir = sessions_dir / "sess-meta"
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        resp = client.patch("/sessions/sess-meta", json={"name": "Renamed Session"})
+        assert resp.status_code == 200
+
+        metadata_path = session_dir / "metadata.json"
+        assert metadata_path.exists(), "metadata.json should be written after rename"
+        metadata = json.loads(metadata_path.read_text())
+        assert metadata.get("name") == "Renamed Session"
+
+    def test_patch_name_emits_session_renamed_event(self, client: TestClient) -> None:
+        """PATCH with name publishes session_renamed event on the EventBus."""
+        import asyncio
+
+        _register_handle(client, "sess-evt")
+        event_bus = client.app.state.event_bus
+
+        published: list = []
+
+        # Monkey-patch publish to capture calls
+        original_publish = event_bus.publish
+
+        def _capture_publish(session_id, event_name, data, correlation_id=None):
+            published.append({"session_id": session_id, "event_name": event_name, "data": data})
+            return original_publish(
+                session_id=session_id,
+                event_name=event_name,
+                data=data,
+                correlation_id=correlation_id,
+            )
+
+        event_bus.publish = _capture_publish
+
+        try:
+            resp = client.patch("/sessions/sess-evt", json={"name": "Emitted"})
+            assert resp.status_code == 200
+        finally:
+            event_bus.publish = original_publish
+
+        rename_events = [e for e in published if e["event_name"] == "session_renamed"]
+        assert len(rename_events) == 1
+        evt = rename_events[0]
+        assert evt["session_id"] == "sess-evt"
+        assert evt["data"]["name"] == "Emitted"
+        assert evt["data"]["session_id"] == "sess-evt"
+
+    def test_patch_name_no_sessions_dir_still_emits_event(
+        self, client: TestClient
+    ) -> None:
+        """PATCH with name emits event even when sessions_dir is not configured."""
+        import asyncio
+        from amplifierd.state.session_manager import SessionManager
+        from amplifierd.state.event_bus import EventBus
+        from amplifierd.config import DaemonSettings
+
+        # Replace manager with one that has sessions_dir=None
+        event_bus = EventBus()
+        settings = DaemonSettings()
+        no_persist_manager = SessionManager(
+            event_bus=event_bus, settings=settings, sessions_dir=None
+        )
+        client.app.state.session_manager = no_persist_manager
+        client.app.state.event_bus = event_bus
+
+        handle = _make_handle("sess-nodir", event_bus=event_bus)
+        no_persist_manager._sessions["sess-nodir"] = handle  # noqa: SLF001
+
+        published: list = []
+        original_publish = event_bus.publish
+
+        def _capture(session_id, event_name, data, correlation_id=None):
+            published.append({"event_name": event_name, "data": data})
+            return original_publish(
+                session_id=session_id,
+                event_name=event_name,
+                data=data,
+                correlation_id=correlation_id,
+            )
+
+        event_bus.publish = _capture
+        try:
+            resp = client.patch("/sessions/sess-nodir", json={"name": "NoDir"})
+            assert resp.status_code == 200
+        finally:
+            event_bus.publish = original_publish
+
+        rename_events = [e for e in published if e["event_name"] == "session_renamed"]
+        assert len(rename_events) == 1
+        assert rename_events[0]["data"]["name"] == "NoDir"
+
+    def test_patch_name_not_found(self, client: TestClient) -> None:
+        """PATCH with name on nonexistent session returns 404."""
+        resp = client.patch("/sessions/ghost", json={"name": "Ghost"})
         assert resp.status_code == 404
